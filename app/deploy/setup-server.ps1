@@ -27,6 +27,57 @@ function Ensure-Chocolatey {
   Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 }
 
+function Test-RewriteInstalled {
+  if (Get-WebGlobalModule -Name 'RewriteModule' -ErrorAction SilentlyContinue) { return $true }
+  return Test-Path 'C:\Windows\System32\inetsrv\rewrite.dll'
+}
+
+function Test-ArrInstalled {
+  if (Get-WebGlobalModule -Name 'ApplicationRequestRouting' -ErrorAction SilentlyContinue) { return $true }
+  return Test-Path 'C:\Program Files\IIS\Application Request Routing\requestRouter.dll'
+}
+
+function Install-ChocoPackageSafe {
+  param(
+    [string]$Name,
+    [string[]]$ExtraArgs = @()
+  )
+  $args = @('install', $Name, '-y', '--no-progress') + $ExtraArgs
+  & choco @args 2>&1 | Out-Host
+  if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 3010) { return }
+  Write-Host "  choco $Name exited $LASTEXITCODE (continuing if already installed)" -ForegroundColor Yellow
+}
+
+function Get-PgBinPath {
+  foreach ($ver in @('18', '17', '16', '15')) {
+    $bin = "C:\Program Files\PostgreSQL\$ver\bin"
+    if (Test-Path (Join-Path $bin 'psql.exe')) { return $bin }
+  }
+  $pgRoot = 'C:\Program Files\PostgreSQL'
+  if (-not (Test-Path $pgRoot)) { return $null }
+  foreach ($dir in Get-ChildItem $pgRoot -Directory | Sort-Object Name -Descending) {
+    $bin = Join-Path $dir.FullName 'bin'
+    if (Test-Path (Join-Path $bin 'psql.exe')) { return $bin }
+  }
+  return $null
+}
+
+function Ensure-PostgresInstalled {
+  if ($SkipPostgresInstall) { return }
+  $bin = Get-PgBinPath
+  if ($bin) {
+    Write-Step "PostgreSQL found: $bin"
+    return
+  }
+  Write-Step 'Installing PostgreSQL 18'
+  Install-ChocoPackageSafe 'postgresql18' @("/params:`"/Password:$PgPassword`"")
+  $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
+  Start-Sleep -Seconds 5
+  if (-not (Get-PgBinPath)) {
+    throw 'PostgreSQL install finished but psql.exe was not found'
+  }
+}
+
 function Install-IisModules {
   Write-Step 'Enabling IIS'
   Install-WindowsFeature -Name Web-Server, Web-WebServer, Web-Common-Http, Web-Static-Content,
@@ -35,14 +86,26 @@ function Install-IisModules {
 
   Import-Module WebAdministration -ErrorAction SilentlyContinue
 
-  if (-not (Get-WebGlobalModule -Name 'RewriteModule' -ErrorAction SilentlyContinue)) {
+  if (Test-RewriteInstalled) {
+    Write-Host '  URL Rewrite already installed'
+  } else {
     Write-Step 'Installing URL Rewrite (choco)'
-    choco install urlrewrite -y --no-progress
+    Install-ChocoPackageSafe 'urlrewrite'
   }
 
-  if (-not (Get-WebGlobalModule -Name 'ApplicationRequestRouting' -ErrorAction SilentlyContinue)) {
+  if (Test-ArrInstalled) {
+    Write-Host '  ARR already installed'
+  } else {
     Write-Step 'Installing Application Request Routing (choco)'
-    choco install iis-arr -y --no-progress
+    if (Test-RewriteInstalled) {
+      Install-ChocoPackageSafe 'iis-arr' @('--ignore-dependencies')
+    } else {
+      Install-ChocoPackageSafe 'iis-arr'
+    }
+  }
+
+  if (-not (Test-ArrInstalled)) {
+    throw 'ARR is not installed. Run: choco install iis-arr -y --ignore-dependencies'
   }
 
   Write-Step 'Enabling ARR proxy'
@@ -59,19 +122,12 @@ function New-JwtSecret {
 Ensure-Chocolatey
 
 Write-Step 'Installing Node.js, Git, NSSM'
-choco install nodejs-lts git nssm -y --no-progress
+Install-ChocoPackageSafe 'nodejs-lts'
+Install-ChocoPackageSafe 'git'
+Install-ChocoPackageSafe 'nssm'
 $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
 
-if (-not $SkipPostgresInstall) {
-  $pgRoot = 'C:\Program Files\PostgreSQL'
-  if (Test-Path $pgRoot) {
-    Write-Step 'PostgreSQL already installed, skipping choco install'
-  } else {
-    Write-Step 'Installing PostgreSQL 18'
-    choco install postgresql18 --params "/Password:$PgPassword" -y --no-progress
-  }
-  $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
-}
+Ensure-PostgresInstalled
 
 Install-IisModules
 
@@ -116,12 +172,8 @@ if (-not (Test-Path $envTarget)) {
 
 Write-Step 'Creating PostgreSQL database'
 if (-not $SkipPostgresInstall) {
-  $pgBin = 'C:\Program Files\PostgreSQL\18\bin'
-  if (-not (Test-Path $pgBin)) {
-    $pgDir = Get-ChildItem 'C:\Program Files\PostgreSQL' -Directory | Sort-Object { [int]($_.Name) } -Descending | Select-Object -First 1
-    if (-not $pgDir) { throw 'PostgreSQL bin directory not found' }
-    $pgBin = Join-Path $pgDir.FullName 'bin'
-  }
+  $pgBin = Get-PgBinPath
+  if (-not $pgBin) { throw 'PostgreSQL bin directory not found' }
   $psql = Join-Path $pgBin 'psql.exe'
   $env:PGPASSWORD = $PgPassword
 
