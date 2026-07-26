@@ -1,0 +1,24 @@
+# 開発用 PostgreSQL（本番同一エンジン: PostgreSQL 16）
+# ・開発モード: docker compose up -d  → DB のみ起動。backend/frontend はホストの Node で起動
+# 本番は Windows Server 上の PostgreSQL に置き換え（接続情報は環境変数で外出し）。
+services:
+  db:
+    image: postgres:16
+    container_name: mhi-db
+    environment:
+      POSTGRES_USER: mop
+      POSTGRES_PASSWORD: mop_local_pw
+      POSTGRES_DB: mop
+      TZ: Asia/Tokyo
+    ports:
+      - "5432:5432"
+    volumes:
+      - mhi_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mop -d mop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mhi_pgdata:

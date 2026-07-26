@@ -1,0 +1,41 @@
+# Dev Container 用の自己完結 compose（相対パスの基準を .devcontainer に固定するため db も内包）。
+# ルートの docker-compose.yml（2モード運用）とは別建て。paths は .devcontainer 基準（.. = リポジトリルート）。
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mop
+      POSTGRES_PASSWORD: mop_local_pw
+      POSTGRES_DB: mop
+      TZ: Asia/Tokyo
+    volumes:
+      - mop_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mop -d mop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dev:
+    image: mcr.microsoft.com/devcontainers/typescript-node:20
+    command: sleep infinity
+    volumes:
+      - ..:/workspaces/mop-app:cached
+      # ホスト(Windows)の node_modules を隠し、コンテナ側(Linux)専用にする
+      - mop_node_modules:/workspaces/mop-app/node_modules
+    environment:
+      PGHOST: db            # 同一ネットワーク：サービス名で解決（compose環境変数が .env より優先）
+      PGPORT: "5432"
+      PGUSER: mop
+      PGPASSWORD: mop_local_pw
+      PGDATABASE: mop
+      CSV_DIR: ./sample-data
+      AS_OF: "2026-07-08"
+      TZ: Asia/Tokyo
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  mop_pgdata:
+  mop_node_modules:

@@ -1,0 +1,5 @@
+node_modules/
+.env
+*.log
+# フロントのビルド出力（npm run build:web で再生成 / フルプロファイルのDockerが内部生成）
+web/

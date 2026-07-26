@@ -1,0 +1,26 @@
+{
+  "name": "mop-app dev",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "dev",
+  "workspaceFolder": "/workspaces/mop-app",
+  "forwardPorts": [8787, 5173, 5432],
+  "portsAttributes": {
+    "8787": { "label": "API＋フロント配信" },
+    "5173": { "label": "Vite dev (HMR)" },
+    "5432": { "label": "PostgreSQL" }
+  },
+  "postCreateCommand": "npm install && npm run setup",
+  "remoteUser": "node",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "editorconfig.editorconfig",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "files.eol": "\n",
+        "typescript.tsdk": "node_modules/typescript/lib"
+      }
+    }
+  }
+}

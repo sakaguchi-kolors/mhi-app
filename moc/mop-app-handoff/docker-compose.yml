@@ -1,0 +1,46 @@
+# 2モード運用：
+#   ・開発モード（日常）        : docker compose up -d        → db のみ起動。アプリはホストのNodeで npm run web:dev / npm run dev
+#   ・ワンコマンド確認モード    : docker compose --profile full up → db＋app を全部コンテナ起動 → http://localhost:8787
+# 本番は Windows Server 上の PostgreSQL＋IIS に置き換え（接続情報は環境変数で外出し）。
+services:
+  db:
+    image: postgres:16
+    container_name: mop-db
+    environment:
+      POSTGRES_USER: mop
+      POSTGRES_PASSWORD: mop_local_pw
+      POSTGRES_DB: mop
+      TZ: Asia/Tokyo
+    ports:
+      - "5432:5432"
+    volumes:
+      - mop_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mop -d mop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # アプリ本体。profile: full の時だけ起動（開発モードでは db だけ動かす）
+  app:
+    build: .
+    container_name: mop-app
+    profiles: ["full"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db            # コンテナ間はサービス名で解決（localhostではない）
+      PGPORT: "5432"
+      PGUSER: mop
+      PGPASSWORD: mop_local_pw
+      PGDATABASE: mop
+      CSV_DIR: ./sample-data
+      AS_OF: "2026-07-08"
+      API_PORT: "8787"
+      TZ: Asia/Tokyo
+    ports:
+      - "8787:8787"
+
+volumes:
+  mop_pgdata:

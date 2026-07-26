@@ -1,0 +1,38 @@
+{
+  "name": "mop-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "部品進捗システム（仮称）ローカル疑似環境 — 本番同一スタック(Node/TS + PostgreSQL + 静的フロント)",
+  "scripts": {
+    "etl": "tsx src/etl.ts",
+    "selftest": "tsx src/selftest.ts",
+    "dev": "tsx src/server.ts",
+    "web:dev": "vite",
+    "build:web": "vite build",
+    "db:init": "tsx src/dbinit.ts",
+    "setup": "npm run db:init && npm run etl"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "csv-parse": "^5.5.6",
+    "express": "^4.19.2",
+    "iconv-lite": "^0.6.3",
+    "pg": "^8.12.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@tanstack/react-table": "^8.20.5"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.11.6",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0"
+  }
+}

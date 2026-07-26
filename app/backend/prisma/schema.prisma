@@ -1,0 +1,291 @@
+// ============================================================
+//  MHI 進捗管理支援システム Prisma スキーマ
+//  （プロトタイプ db/schema.sql v0.1 を移植）
+//  テーブルは用途で3群 + マスタ + 監査/ロール。
+//    ①取込テーブル      = 毎回洗い替え（ETL）
+//    ②算出結果テーブル  = バッチで再生成
+//    ③アプリ固有テーブル = 画面から書込み・永続（取込で消えない）
+//  ①②のキーは製造インスタンス単位の os_id。③も os_id に紐付ける。
+//  DBのカラム名(snake_case)は @map で保持し、Prisma フィールドは camelCase。
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========== ① 取込テーブル（洗い替え） ==========
+model Part {
+  osId         String    @id @map("os_id")
+  partNo       String?   @map("part_no")
+  partName     String?   @map("part_name")
+  category     String?
+  kishu        String? // 機種(型式)。担当チームを分ける主キー
+  finalDue     DateTime? @map("final_due") @db.Date
+  pbsDue       DateTime? @map("pbs_due") @db.Date // PBS計画納期(月末)。DUE_SOURCE切替の再計算用に保持
+  urgentFlag   Boolean   @default(false) @map("urgent_flag")
+  shortageFlag Boolean   @default(false) @map("shortage_flag")
+
+  @@map("t_part")
+}
+
+// OCTPuS由来のShop名フォールバック（SHOPごとの最頻手順内容）のキャッシュ。取込で洗い替え。
+model ShopName {
+  shop String  @id
+  name String?
+
+  @@map("t_shop_name")
+}
+
+model Routing {
+  osId           String    @map("os_id")
+  seq            Int // 工程順（昇順に採番し直した連番）
+  seqLabel       String?   @map("seq_label") // 元の工程NO（例 071-3）
+  shop           String?
+  job            String?
+  planStart      DateTime? @map("plan_start") @db.Timestamptz() // JIW(計算)
+  planEnd        DateTime? @map("plan_end") @db.Timestamptz() // JND(計算)
+  wipFlag        Boolean   @default(false) @map("wip_flag") // 仕掛=1（現在位置）
+  materialStatus String?   @map("material_status") // 払出状況
+  outDate        DateTime? @map("out_date") @db.Date // 外注持出日
+  inDate         DateTime? @map("in_date") @db.Date // 外注持込日
+  etaDate        DateTime? @map("eta_date") @db.Date // 納入予定日（外注の納期回答）
+  orderNo        String?   @map("order_no") // 注文番号（外注PO）
+
+  @@id([osId, seq])
+  @@index([osId], map: "idx_routing_osid")
+  @@map("t_routing")
+}
+
+model ShopMaster {
+  shop    String
+  job     String
+  name    String?
+  machine String?
+
+  @@id([shop, job])
+  @@map("t_shop_master")
+}
+
+// ========== ② 算出結果テーブル（バッチ再生成） ==========
+model PartStatus {
+  osId         String    @id @map("os_id")
+  partNo       String?   @map("part_no")
+  partName     String?   @map("part_name")
+  category     String?
+  kishu        String?
+  finalDue     DateTime? @map("final_due") @db.Date
+  totalShops   Int?      @map("total_shops")
+  doneShops    Int?      @map("done_shops")
+  remainShops  Int?      @map("remain_shops")
+  currentShop  String?   @map("current_shop")
+  daysLeft     Int?      @map("days_left")
+  buffer       Int?
+  color        String? // red / yellow / green
+  stagnantDays Int?      @map("stagnant_days")
+  urgent       Boolean?
+  shortage     Boolean?
+  computedAt   DateTime? @map("computed_at") @db.Timestamptz()
+
+  @@index([color], map: "idx_status_color")
+  @@map("t_part_status")
+}
+
+model Timeline {
+  osId        String    @map("os_id")
+  seq         Int // Shopコマの連番（連続同一SHOPは圧縮済み）
+  shop        String?
+  name        String?
+  status      String? // done / current / wait
+  planEnd     DateTime? @map("plan_end") @db.Date
+  isMilestone Boolean   @default(false) @map("is_milestone")
+  msPassed    Boolean?  @map("ms_passed")
+  msColor     String?   @map("ms_color") // 未通過マイルストンの色 red/yellow/green
+  msDue       DateTime? @map("ms_due") @db.Date
+  gaic        Boolean   @default(false) // 外注区間か
+  gaicStatus  String?   @map("gaic_status") // blue/yellow/red
+  orderNo     String?   @map("order_no")
+
+  @@id([osId, seq])
+  @@index([osId], map: "idx_timeline_osid")
+  @@map("t_timeline")
+}
+
+// ========== ③ アプリ固有テーブル（画面から書込・永続。取込で消さない） ==========
+model Assignment {
+  osId       String    @id @map("os_id")
+  userId     Int?      @map("user_id") // null = 未割当（ログインユーザーへの割当）
+  assignedAt DateTime? @map("assigned_at") @db.Timestamptz()
+  user       User?     @relation(fields: [userId], references: [userId], onDelete: SetNull)
+
+  @@map("t_assignment")
+}
+
+model Trouble {
+  osId      String    @id @map("os_id")
+  flagged   Boolean   @default(false)
+  flaggedAt DateTime? @map("flagged_at") @db.Timestamptz()
+  memo      String? // 困りごとメモ（一覧非表示・詳細/ポップアップのみ）
+
+  @@map("t_trouble")
+}
+
+// 一旦置いておく部品。通常一覧から除外し、明示トグルON時のみ表示。
+model Shelved {
+  osId      String    @id @map("os_id")
+  flagged   Boolean   @default(false)
+  flaggedAt DateTime? @map("flagged_at") @db.Timestamptz()
+
+  @@map("t_shelved")
+}
+
+model Note {
+  osId      String    @id @map("os_id")
+  body      String? // 対応メモ
+  updatedAt DateTime? @map("updated_at") @db.Timestamptz()
+
+  @@map("t_note")
+}
+
+// ========== マスタ（運用側で保守する参照・設定系。設計仕様書3章） ==========
+model Owner {
+  ownerId   Int     @id @default(autoincrement()) @map("owner_id")
+  name      String
+  dept      String? // 所属
+  team      String? // 担当チーム（予約列）
+  adAccount String? @map("ad_account") // ADアカウント
+  role      String  @default("工程員") // 工程員 / 管理者
+  active    Boolean @default(true)
+
+  @@map("m_owner")
+}
+
+// パラメータ設定 m_param（画面編集）: 2.7の外出し値
+model Param {
+  key         String  @id
+  value       String
+  description String?
+
+  @@map("m_param")
+}
+
+// 中間マイルストン定義 m_milestone（画面編集）
+//   matchType: shop(完全一致) / shop_prefix(前方一致) / name_contains(名称部分一致)
+model Milestone {
+  id        Int     @id @default(autoincrement())
+  matchType String  @map("match_type")
+  pattern   String
+  label     String?
+  active    Boolean @default(true)
+
+  @@map("m_milestone")
+}
+
+// Shop別標準LTマスタ m_shop_lt: 未登録Shopは既定LTを使用
+model ShopLt {
+  shop   String  @id
+  ltDays Decimal @map("lt_days") @db.Decimal
+  active Boolean @default(true)
+
+  @@map("m_shop_lt")
+}
+
+// 稼働日カレンダー m_calendar: 休日を登録すると残日数を稼働日ベースに
+model Calendar {
+  calDate   DateTime @id @map("cal_date") @db.Date
+  isWorkday Boolean  @default(false) @map("is_workday")
+  note      String?
+
+  @@map("m_calendar")
+}
+
+// 外注先マスタ m_vendor: 注文番号プレフィックス→外注先名/標準戻りLT
+model Vendor {
+  orderPrefix String   @id @map("order_prefix")
+  vendorName  String   @map("vendor_name")
+  returnLt    Decimal? @map("return_lt") @db.Decimal
+  active      Boolean  @default(true)
+
+  @@map("m_vendor")
+}
+
+// 完成品分類マスタ m_category: 部品番号パターン→分類。priority昇順で最初の一致を採用
+model Category {
+  id       Int     @id @default(autoincrement())
+  pattern  String // 正規表現（部品番号に対して）
+  category String
+  priority Int     @default(100)
+  active   Boolean @default(true)
+
+  @@map("m_category")
+}
+
+// 機種簿 m_kishu: 取込で出現した機種を自動登録。取込では消さない。
+model Kishu {
+  kishu  String  @id
+  team   String? // （将来用の予約列。現行は未使用）
+  note   String?
+  active Boolean @default(true)
+
+  @@map("m_kishu")
+}
+
+// 担当者×機種の多対多（担当者マスタUIのチェックボックスで設定）。取込では消さない。
+model OwnerKishu {
+  ownerId Int    @map("owner_id")
+  kishu   String
+
+  @@id([ownerId, kishu])
+  @@map("m_owner_kishu")
+}
+
+// ========== 監査・ロール（設計仕様書1.3） ==========
+model AuditLog {
+  id      Int      @id @default(autoincrement())
+  appUser String?  @map("app_user")
+  action  String? // master.upsert / master.delete / assignment 等
+  target  String? // 対象マスタ/テーブル名
+  ref     String? // os_id や 主キー
+  before  Json?
+  after   Json?
+  at      DateTime @default(now()) @db.Timestamptz()
+
+  @@map("t_audit_log")
+}
+
+model UserRole {
+  appUser String @id @map("app_user")
+  role    String @default("工程員") // 工程員 / 管理者
+
+  @@map("t_user_role")
+}
+
+// ========== 認証ユーザー（ログイン＝担当者） ==========
+// 部品割当・担当機種・ログインを m_user に統一。旧 m_owner は非推奨（残存テーブルのみ）。
+model User {
+  userId       Int      @id @default(autoincrement()) @map("user_id")
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  displayName  String   @map("display_name")
+  role         String   @default("工程員") // 管理者 / 工程員
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  kishus       UserKishu[]
+  assignments  Assignment[]
+
+  @@map("m_user")
+}
+
+// 担当者（ユーザー）×機種。自動割り当てのキー。
+model UserKishu {
+  userId Int    @map("user_id")
+  kishu  String
+  user   User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([userId, kishu])
+  @@map("m_user_kishu")
+}

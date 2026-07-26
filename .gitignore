@@ -1,0 +1,9 @@
+.DS_Store
+**/.env
+!**/.env.example
+!**/.env.staging.example
+node_modules/
+**/node_modules/
+**/dist/
+*.tsbuildinfo
+*.log

@@ -1,0 +1,13 @@
+# 改行コードを正規化（Windows/WSL2/mac 混在での CRLF↔LF 揺れを防ぐ）
+* text=auto eol=lf
+
+# バイナリ／原本はそのまま（正規化しない）
+*.csv  binary
+*.docx binary
+*.pptx binary
+*.xlsx binary
+*.pdf  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.ico  binary
