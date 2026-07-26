@@ -14,7 +14,7 @@
 
 ```
 app/
-  docker-compose.yml     PostgreSQL(本番同一エンジン: PG16)
+  docker-compose.yml     PostgreSQL(本番同一エンジン: PG18)
   .env.example           設定サンプル
   sample-data/           同梱サンプルCSV（CSV_DIR の既定）
   backend/               ── NestJS + Prisma ──

@@ -1,9 +1,9 @@
-# 開発用 PostgreSQL（本番同一エンジン: PostgreSQL 16）
+# 開発用 PostgreSQL（本番同一エンジン: PostgreSQL 18）
 # ・開発モード: docker compose up -d  → DB のみ起動。backend/frontend はホストの Node で起動
 # 本番は Windows Server 上の PostgreSQL に置き換え（接続情報は環境変数で外出し）。
 services:
   db:
-    image: postgres:16
+    image: postgres:18
     container_name: mhi-db
     environment:
       POSTGRES_USER: mop

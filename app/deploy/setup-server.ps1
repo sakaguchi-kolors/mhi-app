@@ -67,8 +67,8 @@ choco install nodejs-lts git nssm -y --no-progress
 $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
 
 if (-not $SkipPostgresInstall) {
-  Write-Step 'Installing PostgreSQL 16'
-  choco install postgresql16 --params "/Password:$PgPassword" -y --no-progress
+  Write-Step 'Installing PostgreSQL 18'
+  choco install postgresql18 --params "/Password:$PgPassword" -y --no-progress
   $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
 }
 
@@ -115,7 +115,7 @@ if (-not (Test-Path $envTarget)) {
 
 Write-Step 'Creating PostgreSQL database'
 if (-not $SkipPostgresInstall) {
-  $pgBin = 'C:\Program Files\PostgreSQL\16\bin'
+  $pgBin = 'C:\Program Files\PostgreSQL\18\bin'
   if (-not (Test-Path $pgBin)) {
     $pgBin = (Get-ChildItem 'C:\Program Files\PostgreSQL' -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName + '\bin'
   }
