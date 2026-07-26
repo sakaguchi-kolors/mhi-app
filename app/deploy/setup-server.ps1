@@ -36,17 +36,13 @@ function Install-IisModules {
   Import-Module WebAdministration -ErrorAction SilentlyContinue
 
   if (-not (Get-WebGlobalModule -Name 'RewriteModule' -ErrorAction SilentlyContinue)) {
-    Write-Step 'Installing URL Rewrite'
-    $rewriteMsi = Join-Path $env:TEMP 'rewrite_amd64.msi'
-    Invoke-WebRequest -Uri 'https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi' -OutFile $rewriteMsi
-    Start-Process msiexec.exe -ArgumentList "/i `"$rewriteMsi`" /qn" -Wait
+    Write-Step 'Installing URL Rewrite (choco)'
+    choco install urlrewrite -y --no-progress
   }
 
   if (-not (Get-WebGlobalModule -Name 'ApplicationRequestRouting' -ErrorAction SilentlyContinue)) {
-    Write-Step 'Installing Application Request Routing'
-    $arrMsi = Join-Path $env:TEMP 'requestRouter_amd64.msi'
-    Invoke-WebRequest -Uri 'https://download.microsoft.com/download/E/9/8/E9849D6A-020E-47E4-9BD2-CB48C2E026E0/requestRouter_amd64.msi' -OutFile $arrMsi
-    Start-Process msiexec.exe -ArgumentList "/i `"$arrMsi`" /qn" -Wait
+    Write-Step 'Installing Application Request Routing (choco)'
+    choco install iis-arr -y --no-progress
   }
 
   Write-Step 'Enabling ARR proxy'
@@ -67,8 +63,13 @@ choco install nodejs-lts git nssm -y --no-progress
 $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
 
 if (-not $SkipPostgresInstall) {
-  Write-Step 'Installing PostgreSQL 18'
-  choco install postgresql18 --params "/Password:$PgPassword" -y --no-progress
+  $pgRoot = 'C:\Program Files\PostgreSQL'
+  if (Test-Path $pgRoot) {
+    Write-Step 'PostgreSQL already installed, skipping choco install'
+  } else {
+    Write-Step 'Installing PostgreSQL 18'
+    choco install postgresql18 --params "/Password:$PgPassword" -y --no-progress
+  }
   $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
 }
 
@@ -117,7 +118,9 @@ Write-Step 'Creating PostgreSQL database'
 if (-not $SkipPostgresInstall) {
   $pgBin = 'C:\Program Files\PostgreSQL\18\bin'
   if (-not (Test-Path $pgBin)) {
-    $pgBin = (Get-ChildItem 'C:\Program Files\PostgreSQL' -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName + '\bin'
+    $pgDir = Get-ChildItem 'C:\Program Files\PostgreSQL' -Directory | Sort-Object { [int]($_.Name) } -Descending | Select-Object -First 1
+    if (-not $pgDir) { throw 'PostgreSQL bin directory not found' }
+    $pgBin = Join-Path $pgDir.FullName 'bin'
   }
   $psql = Join-Path $pgBin 'psql.exe'
   $env:PGPASSWORD = $PgPassword
