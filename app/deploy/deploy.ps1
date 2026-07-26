@@ -1,21 +1,4 @@
 #Requires -Version 5.1
-<#
-.SYNOPSIS
-  MHI 進捗管理 — 検証環境デプロイ
-
-.USAGE
-  cd C:\apps\mhi-app\app\deploy
-  .\deploy.ps1                 # 通常デプロイ
-  .\deploy.ps1 -FirstRun       # 初回（seed + etl も実行）
-  .\deploy.ps1 -SkipGitPull    # git pull をスキップ
-
-.PARAMETER RepoRoot
-  リポジトリの app/ ディレクトリ（既定: スクリプトの親の親）
-.PARAMETER SiteRoot
-  IIS 物理パス（既定: C:\inetpub\mhi）
-.PARAMETER ServiceName
-  NestJS Windows Service 名（既定: MhiProgressApi）
-#>
 param(
   [switch]$FirstRun,
   [switch]$SkipGitPull,
@@ -34,7 +17,7 @@ function Test-ServiceExists([string]$Name) {
   return [bool](Get-Service -Name $Name -ErrorAction SilentlyContinue)
 }
 
-Write-Step 'デプロイ開始'
+Write-Step 'Deploy started'
 Write-Host "RepoRoot : $RepoRoot"
 Write-Host "SiteRoot : $SiteRoot"
 
@@ -46,7 +29,7 @@ if (-not $SkipGitPull) {
     git pull
     Pop-Location
   } else {
-    Write-Host '  git リポジトリではないため pull をスキップ'
+    Write-Host '  Skipping git pull (not a git repo)'
   }
 }
 
@@ -55,7 +38,7 @@ $frontend = Join-Path $RepoRoot 'frontend'
 $envFile = Join-Path $backend '.env'
 
 if (-not (Test-Path $envFile)) {
-  throw ".env がありません: $envFile`n  .env.staging.example をコピーして値を設定してください。"
+  throw ".env not found: $envFile"
 }
 
 Write-Step 'backend: npm ci && build'
@@ -73,36 +56,37 @@ npm run build
 Pop-Location
 
 if ($FirstRun) {
-  Write-Step '初回: seed + etl'
+  Write-Step 'First run: seed + etl'
   Push-Location $backend
   npm run seed
   npm run etl
   Pop-Location
 }
 
-Write-Step "IIS 成果物配置 -> $SiteRoot"
+Write-Step "Copy frontend to IIS: $SiteRoot"
 if (-not (Test-Path $SiteRoot)) {
   New-Item -ItemType Directory -Path $SiteRoot -Force | Out-Null
 }
 
 $dist = Join-Path $frontend 'dist'
 if (-not (Test-Path (Join-Path $dist 'index.html'))) {
-  throw "frontend/dist が見つかりません。build を確認してください。"
+  throw "frontend/dist not found. Check build output."
 }
 
 Get-ChildItem $SiteRoot -Force | Remove-Item -Recurse -Force
 Copy-Item -Path (Join-Path $dist '*') -Destination $SiteRoot -Recurse -Force
 Copy-Item -Path (Join-Path $PSScriptRoot 'web.config') -Destination $SiteRoot -Force
 
-Write-Step 'Windows Service 再起動'
+Write-Step 'Restarting Windows Service'
 if (-not (Test-ServiceExists $ServiceName)) {
-  throw "サービス '$ServiceName' がありません。setup-server.ps1 を先に実行してください。"
+  throw "Service '$ServiceName' not found. Run setup-server.ps1 first."
 }
 Restart-Service -Name $ServiceName -Force
 Start-Sleep -Seconds 3
 
-Write-Step 'ヘルスチェック'
+Write-Step 'Health check'
 $healthOk = $false
+$resp = $null
 for ($i = 0; $i -lt 10; $i++) {
   try {
     $resp = Invoke-RestMethod -Uri 'http://127.0.0.1:8787/api/auth/setup' -TimeoutSec 5
@@ -116,12 +100,12 @@ for ($i = 0; $i -lt 10; $i++) {
 }
 
 if (-not $healthOk) {
-  throw 'API ヘルスチェック失敗。サービスログを確認してください: C:\apps\mhi-app\logs\'
+  throw 'API health check failed. See C:\apps\mhi-app\logs\'
 }
 
-Write-Host "`nデプロイ完了" -ForegroundColor Green
-Write-Host '  API : http://127.0.0.1:8787/api/auth/setup'
-Write-Host "  Web : https://<your-domain-or-ip>/"
+Write-Host "`nDeploy complete." -ForegroundColor Green
+Write-Host '  API: http://127.0.0.1:8787/api/auth/setup'
+Write-Host '  Web: http://<public-ip>/'
 if ($resp.needsSetup) {
-  Write-Host '  初回: /setup で管理者アカウントを作成してください' -ForegroundColor Yellow
+  Write-Host '  Open /setup to create admin account' -ForegroundColor Yellow
 }
