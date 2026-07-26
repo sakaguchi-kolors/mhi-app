@@ -82,7 +82,8 @@ function Install-IisModules {
   Write-Step 'Enabling IIS'
   Install-WindowsFeature -Name Web-Server, Web-WebServer, Web-Common-Http, Web-Static-Content,
     Web-Default-Doc, Web-Dir-Browsing, Web-Http-Errors, Web-Http-Logging, Web-Request-Monitor,
-    Web-Filtering, Web-Stat-Compression, Web-Mgmt-Tools, Web-Mgmt-Console -IncludeManagementTools | Out-Null
+    Web-Filtering, Web-Stat-Compression, Web-Mgmt-Tools, Web-Mgmt-Console,
+    Web-Basic-Auth, Web-Windows-Auth -IncludeManagementTools | Out-Null
 
   Import-Module WebAdministration -ErrorAction SilentlyContinue
 
@@ -212,6 +213,10 @@ New-Website -Name $SiteName -PhysicalPath $SiteRoot -Port 80 -Force | Out-Null
 
 if (-not $SkipBasicAuth) {
   Write-Step 'Configuring IIS Basic auth'
+  $appcmd = Join-Path $env:windir 'system32\inetsrv\appcmd.exe'
+  & $appcmd unlock config /section:anonymousAuthentication | Out-Null
+  & $appcmd unlock config /section:basicAuthentication | Out-Null
+
   Set-WebConfigurationProperty -Filter '/system.webServer/security/authentication/anonymousAuthentication' -Name enabled -Value $false -PSPath "IIS:\Sites\$SiteName"
   Set-WebConfigurationProperty -Filter '/system.webServer/security/authentication/basicAuthentication' -Name enabled -Value $true -PSPath "IIS:\Sites\$SiteName"
 
