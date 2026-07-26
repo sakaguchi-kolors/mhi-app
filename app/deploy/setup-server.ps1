@@ -206,10 +206,15 @@ if ($service) {
 
 Write-Step 'Creating IIS site'
 Import-Module WebAdministration
+if (Get-Website -Name 'Default Web Site' -ErrorAction SilentlyContinue) {
+  Write-Host '  Stopping Default Web Site (port 80 conflict)'
+  Stop-Website -Name 'Default Web Site'
+}
 if (Test-Path "IIS:\Sites\$SiteName") {
   Remove-Website -Name $SiteName
 }
 New-Website -Name $SiteName -PhysicalPath $SiteRoot -Port 80 -Force | Out-Null
+Start-Website -Name $SiteName
 
 if (-not $SkipBasicAuth) {
   Write-Step 'Configuring IIS Basic auth'
