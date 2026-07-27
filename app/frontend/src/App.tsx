@@ -10,7 +10,6 @@ import { Masters } from './components/Masters';
 import { Ingest } from './components/Ingest';
 import { OwnerKishu } from './components/OwnerKishu';
 import { Login, Setup } from './Auth';
-import { Users } from './Users';
 import { Sidebar } from './components/Sidebar';
 import { Toast, useToast } from './components/Toast';
 import { PAGE_TITLES, routes, screenFromPath } from './routes';
@@ -22,9 +21,11 @@ function AdminRoute({ admin, children }: { admin: boolean; children: React.React
 
 function PartDetailRoute({
   parts,
+  stagnantThreshold,
   onNote,
 }: {
   parts: Part[];
+  stagnantThreshold: number;
   onNote: (id: string, note: string) => void;
 }) {
   const { id } = useParams<{ id: string }>();
@@ -41,7 +42,7 @@ function PartDetailRoute({
       </div>
     );
   }
-  return <PartDetail part={part} onBack={() => navigate(routes.parts)} onNote={onNote} />;
+  return <PartDetail part={part} stagnantThreshold={stagnantThreshold} onBack={() => navigate(routes.parts)} onNote={onNote} />;
 }
 
 function AppLayout({
@@ -120,6 +121,7 @@ function AppLayout({
                     <PartsList
                       parts={parts}
                       owners={meta.owners}
+                      stagnantThreshold={meta.stagnantThreshold}
                       admin={admin}
                       defaultOwnerFilter={admin ? undefined : me.displayName}
                       onAutoAssign={onAutoAssign}
@@ -147,12 +149,12 @@ function AppLayout({
                   ) : null
                 }
               />
-              <Route path={`${routes.parts}/:id`} element={<PartDetailRoute parts={parts} onNote={onNote} />} />
+              <Route path={`${routes.parts}/:id`} element={<PartDetailRoute parts={parts} stagnantThreshold={meta?.stagnantThreshold ?? 10} onNote={onNote} />} />
               <Route path={routes.ingest} element={<AdminRoute admin={admin}><Ingest toast={toast} onIngested={reload} /></AdminRoute>} />
               <Route path={routes.owners} element={<AdminRoute admin={admin}><OwnerKishu toast={toast} /></AdminRoute>} />
               <Route path={routes.masters} element={<AdminRoute admin={admin}><Navigate to={routes.master('param')} replace /></AdminRoute>} />
               <Route path={`${routes.masters}/:name`} element={<AdminRoute admin={admin}><Masters parts={parts} onRecompute={onRecompute} onReload={reload} toast={toast} /></AdminRoute>} />
-              <Route path={routes.users} element={<AdminRoute admin={admin}><Users toast={toast} meId={me.userId} /></AdminRoute>} />
+              <Route path="/users" element={<Navigate to={routes.owners} replace />} />
               <Route path="*" element={<Navigate to={routes.parts} replace />} />
             </Routes>
           </main>

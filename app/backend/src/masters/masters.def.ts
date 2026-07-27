@@ -9,6 +9,7 @@ export interface ColDef {
   type: ColType;
   options?: string[];
   readonly?: boolean;
+  required?: boolean;
 }
 export interface MasterDef {
   name: string; // URLスラグ
@@ -32,7 +33,7 @@ export const MASTERS: MasterDef[] = [
     note: '緊急度の色・所要日数・納期の採用元など。編集後は「再計算」で反映。',
     columns: [
       { key: 'key', label: 'キー', type: 'text', readonly: true },
-      { key: 'value', label: '値', type: 'text' },
+      { key: 'value', label: '値', type: 'text', required: true },
       { key: 'description', label: '説明', type: 'text' },
     ],
   },
@@ -45,8 +46,8 @@ export const MASTERS: MasterDef[] = [
     autoId: true,
     note: 'タイムライン上で検査マイルストンとみなす工程の条件。',
     columns: [
-      { key: 'match_type', label: '種別', type: 'select', options: ['shop', 'shop_prefix', 'name_contains'] },
-      { key: 'pattern', label: 'パターン', type: 'text' },
+      { key: 'match_type', label: '種別', type: 'select', options: ['shop', 'shop_prefix', 'name_contains'], required: true },
+      { key: 'pattern', label: 'パターン', type: 'text', required: true },
       { key: 'label', label: '名称(任意)', type: 'text' },
       { key: 'active', label: '有効', type: 'bool' },
     ],
@@ -60,8 +61,8 @@ export const MASTERS: MasterDef[] = [
     autoId: false,
     note: '未登録Shopは既定LT(param)を使用。登録すると残Shop所要日数の計算が精緻化。',
     columns: [
-      { key: 'shop', label: 'SHOP', type: 'text' },
-      { key: 'lt_days', label: '標準LT(日)', type: 'number' },
+      { key: 'shop', label: 'SHOP', type: 'text', required: true },
+      { key: 'lt_days', label: '標準LT(日)', type: 'number', required: true },
       { key: 'active', label: '有効', type: 'bool' },
     ],
   },
@@ -74,7 +75,7 @@ export const MASTERS: MasterDef[] = [
     autoId: false,
     note: '休日を登録すると残日数から除外。未登録＝暦日。',
     columns: [
-      { key: 'cal_date', label: '日付(YYYY-MM-DD)', type: 'date' },
+      { key: 'cal_date', label: '日付(YYYY-MM-DD)', type: 'date', required: true },
       { key: 'is_workday', label: '稼働日?', type: 'bool' },
       { key: 'note', label: '摘要', type: 'text' },
     ],
@@ -88,8 +89,8 @@ export const MASTERS: MasterDef[] = [
     autoId: false,
     note: '注文番号の前方一致で外注先名を表示（再計算不要・一覧再読込で反映）。',
     columns: [
-      { key: 'order_prefix', label: '注文番号プレフィックス', type: 'text' },
-      { key: 'vendor_name', label: '外注先名', type: 'text' },
+      { key: 'order_prefix', label: '注文番号プレフィックス', type: 'text', required: true },
+      { key: 'vendor_name', label: '外注先名', type: 'text', required: true },
       { key: 'return_lt', label: '標準戻りLT(日)', type: 'number' },
       { key: 'active', label: '有効', type: 'bool' },
     ],
@@ -103,8 +104,8 @@ export const MASTERS: MasterDef[] = [
     autoId: true,
     note: '部品番号の正規表現→分類。priority昇順で最初の一致を採用。未一致は「その他」。',
     columns: [
-      { key: 'pattern', label: 'パターン(正規表現)', type: 'text' },
-      { key: 'category', label: '分類', type: 'text' },
+      { key: 'pattern', label: 'パターン(正規表現)', type: 'text', required: true },
+      { key: 'category', label: '分類', type: 'text', required: true },
       { key: 'priority', label: '優先度', type: 'number' },
       { key: 'active', label: '有効', type: 'bool' },
     ],

@@ -3,7 +3,6 @@ import type { Color, Part } from '../../types';
 export type Row = Record<string, unknown>;
 
 export const RECOMPUTE_MASTERS = new Set(['param', 'milestone', 'shop_lt', 'calendar', 'category']);
-export const PENDING_KEY = 'masters.pendingRecompute';
 export const LAST_RECOMPUTE_KEY = 'masters.lastRecomputeAt';
 
 export function bufferColor(buffer: number, green: number, yellow: number): Color {
@@ -29,21 +28,6 @@ export function num(v: unknown, fallback = 0): number {
 
 export function str(v: unknown): string {
   return v == null ? '' : String(v);
-}
-
-export function loadPending(): string[] {
-  try {
-    const raw = sessionStorage.getItem(PENDING_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw) as unknown;
-    return Array.isArray(arr) ? arr.map(String) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function savePending(names: string[]) {
-  sessionStorage.setItem(PENDING_KEY, JSON.stringify([...new Set(names)]));
 }
 
 export function loadLastRecompute(): string | null {
@@ -72,6 +56,29 @@ export const MATCH_TYPE_LABEL: Record<string, string> = {
   shop: 'Shopが次と一致',
   shop_prefix: 'Shopが次で始まる',
 };
+
+/** 完成品分類ルールを部品番号に適用 */
+export function classifyPart(partNo: string, rules: Row[]): string {
+  const sorted = [...rules]
+    .filter((r) => r.active === true || r.active === 'true')
+    .sort((a, b) => num(a.priority) - num(b.priority));
+  for (const r of sorted) {
+    const pattern = str(r.pattern);
+    if (!pattern) continue;
+    try {
+      if (new RegExp(pattern).test(partNo)) return str(r.category);
+    } catch {
+      /* 不正な正規表現はスキップ */
+    }
+  }
+  return 'その他';
+}
+
+/** 部品のタイムラインに Shop が含まれるか（未完了工程） */
+export function partUsesShop(part: Part, shop: string): boolean {
+  if (part.currentShop === shop) return true;
+  return part.timeline.some((c) => c.shop === shop && c.status !== 'done');
+}
 
 export function fmtDateTime(iso: string | null): string {
   if (!iso) return '—';

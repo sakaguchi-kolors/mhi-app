@@ -8,6 +8,7 @@ import { AppConfigService } from '../config/app-config.service';
 import { readCsv, readCsvStream, clean } from './csv';
 import { computePart, type PartMeta } from '../calc/calc';
 import { loadMasters, type MasterContext } from '../masters/masters.util';
+import { AuditService } from '../audit/audit.service';
 import type { RoutingRow } from '../common/types';
 
 // ---------- 日付パーサ ----------
@@ -86,6 +87,25 @@ export interface EtlSummary {
   timeline: number;
 }
 
+type ShopMasterRow = { shop: string; job: string; name: string | null; machine: string | null };
+
+function shopMasterKey(row: ShopMasterRow): string {
+  return `${row.shop}::${row.job}`;
+}
+
+function shopMasterEqual(a: ShopMasterRow, b: ShopMasterRow): boolean {
+  return a.name === b.name && a.machine === b.machine;
+}
+
+function toShopMasterRow(r: { shop: unknown; job: unknown; name: unknown; machine: unknown }): ShopMasterRow {
+  return {
+    shop: String(r.shop ?? ''),
+    job: String(r.job ?? ''),
+    name: r.name == null ? null : String(r.name),
+    machine: r.machine == null ? null : String(r.machine),
+  };
+}
+
 interface Agg {
   partNo: string;
   partName: string;
@@ -101,11 +121,13 @@ export class EtlService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: AppConfigService,
+    private readonly audit: AuditService,
   ) {}
 
   /** CSV取込＋算出＋DB洗い替え（①②のみ。③アプリ固有は残す） */
-  async runEtl(opts: { dry?: boolean } = {}): Promise<EtlSummary> {
+  async runEtl(opts: { dry?: boolean; user?: string } = {}): Promise<EtlSummary> {
     const dry = opts.dry ?? false;
+    const auditUser = opts.user ?? 'etl';
     const { csvDir, files } = this.config;
     const asOf = this.config.asOfDate;
     const M = await loadMasters(this.prisma); // マスタ読込（算出の挙動を規定）
@@ -302,6 +324,9 @@ export class EtlService {
     const kishuRows = [...new Set(computed.map((x) => x.meta.kishu).filter(Boolean))].map((k) => [k]);
     const shopNameRows = [...octName].filter(([s, nm]) => s && nm).map(([s, nm]) => [s, nm]);
 
+    const prevShopMaster = (await this.prisma.shopMaster.findMany()).map(toShopMasterRow);
+    const prevKishu = new Set((await this.prisma.kishu.findMany({ select: { kishu: true } })).map((r) => r.kishu));
+
     console.time('[etl] db write');
     await this.prisma.$transaction(
       async (tx) => {
@@ -321,8 +346,42 @@ export class EtlService {
       { timeout: 600000, maxWait: 60000 },
     );
     console.timeEnd('[etl] db write');
+
+    await this.auditImportedShopMaster(auditUser, prevShopMaster, shopMasterRows.map((r) => toShopMasterRow({
+      shop: r[0], job: r[1], name: r[2], machine: r[3],
+    })));
+    await this.auditImportedKishu(auditUser, prevKishu, kishuRows.map((r) => String(r[0])));
+
     this.logger.log(`完了: t_part_status=${statusRows.length}件 / t_timeline=${timelineRows.length}件`);
     return { parts: statusRows.length, timeline: timelineRows.length };
+  }
+
+  /** 取込による t_shop_master の行単位差分を監査ログへ記録 */
+  private async auditImportedShopMaster(user: string, beforeRows: ShopMasterRow[], afterRows: ShopMasterRow[]): Promise<void> {
+    const beforeMap = new Map(beforeRows.map((r) => [shopMasterKey(r), r]));
+    const afterMap = new Map(afterRows.map((r) => [shopMasterKey(r), r]));
+
+    for (const [key, after] of afterMap) {
+      const before = beforeMap.get(key);
+      if (!before) {
+        await this.audit.record(user, 'master.import', 't_shop_master', key, null, after);
+      } else if (!shopMasterEqual(before, after)) {
+        await this.audit.record(user, 'master.import', 't_shop_master', key, before, after);
+      }
+    }
+    for (const [key, before] of beforeMap) {
+      if (!afterMap.has(key)) {
+        await this.audit.record(user, 'master.import', 't_shop_master', key, before, null);
+      }
+    }
+  }
+
+  /** 取込で新規登録された m_kishu を監査ログへ記録 */
+  private async auditImportedKishu(user: string, prev: Set<string>, imported: string[]): Promise<void> {
+    for (const kishu of imported) {
+      if (prev.has(kishu)) continue;
+      await this.audit.record(user, 'master.import', 'm_kishu', kishu, null, { kishu, active: true });
+    }
   }
 
   /**

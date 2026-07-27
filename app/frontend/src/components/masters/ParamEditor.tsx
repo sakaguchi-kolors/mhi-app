@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { Part } from '../../types';
 import type { Row } from './shared';
 import { colorCounts, num, str } from './shared';
+import { UpdatedMeta } from './RowHistory';
 
 type Props = {
   rows: Row[];
@@ -33,6 +34,14 @@ export function ParamEditor({ rows, parts, onSave }: Props) {
   const previewDiffers =
     current.green !== preview.green || current.yellow !== preview.yellow || current.red !== preview.red;
 
+  const stagSaved = num(get('STAGNANT_THRESHOLD', '10'), 10);
+  const stagDraft = num(val('STAGNANT_THRESHOLD', '10'), 10);
+  const stagCurrent = useMemo(() => parts.filter((p) => p.stagnant >= stagSaved).length, [parts, stagSaved]);
+  const stagPreview = useMemo(() => parts.filter((p) => p.stagnant >= stagDraft).length, [parts, stagDraft]);
+  const stagPreviewDiffers = stagCurrent !== stagPreview;
+
+  const dueSource = val('DUE_SOURCE', 'flexsche');
+
   const saveKey = async (key: string) => {
     const row = byKey.get(key);
     if (!row) return;
@@ -50,7 +59,7 @@ export function ParamEditor({ rows, parts, onSave }: Props) {
     <div className="master-forms">
       <div className="master-card">
         <h4>緊急度の色分け</h4>
-        <p className="mnote">部品のバッファ（余裕日数）に応じて一覧の色が決まります。変更後は再計算で反映されます。</p>
+        <p className="mnote">部品のバッファ（余裕日数）に応じて一覧の色が決まります。保存すると一覧に自動反映されます。</p>
         <div className="param-color-scale">
           <span className="swatch green">緑</span>
           <span className="scale-rule">バッファ ≥</span>
@@ -102,6 +111,7 @@ export function ParamEditor({ rows, parts, onSave }: Props) {
           </p>
         </div>
         <div className="param-actions">
+          <UpdatedMeta row={byKey.get('BUFFER_GREEN') ?? {}} />
           <button
             type="button"
             className="mbtn save"
@@ -118,24 +128,29 @@ export function ParamEditor({ rows, parts, onSave }: Props) {
 
       <div className="master-card">
         <h4>所要日数・マイルストン係数</h4>
+        <p className="mnote">保存すると部品一覧・タイムラインに自動反映されます。</p>
         <div className="param-grid">
           <ParamField
             label="1Shopあたりの既定LT"
             unit="日"
-            help={desc('SHOP_LT_DAYS') || 'Shop別LT未登録時に使う所要日数。残所要・バッファに効きます。'}
+            help={desc('SHOP_LT_DAYS') || 'Shop別LT未登録時に使う1工程あたりの所要日数。'}
+            effect="残Shopの所要日数 → バッファ（余裕日数）→ 一覧の緊急度色"
             value={val('SHOP_LT_DAYS', '4')}
             dirty={dirty('SHOP_LT_DAYS')}
             onChange={(v) => setVal('SHOP_LT_DAYS', v)}
             onSave={() => saveKey('SHOP_LT_DAYS')}
+            row={byKey.get('SHOP_LT_DAYS')}
           />
           <ParamField
             label="マイルストン期日の逆算"
             unit="日/残Shop"
-            help={desc('MILESTONE_LT_DAYS') || '検査マイルストン期日を最終納期から逆算する係数。'}
+            help={desc('MILESTONE_LT_DAYS') || '検査マイルストンの期日を最終納期から逆算するときの係数。'}
+            effect="部品詳細タイムラインのマイルストン期日と、その色分け"
             value={val('MILESTONE_LT_DAYS', '5')}
             dirty={dirty('MILESTONE_LT_DAYS')}
             onChange={(v) => setVal('MILESTONE_LT_DAYS', v)}
             onSave={() => saveKey('MILESTONE_LT_DAYS')}
+            row={byKey.get('MILESTONE_LT_DAYS')}
           />
         </div>
       </div>
@@ -146,17 +161,34 @@ export function ParamEditor({ rows, parts, onSave }: Props) {
           <ParamField
             label="滞留日数の閾値"
             unit="日"
-            help={desc('STAGNANT_THRESHOLD') || '滞留集計用の閾値。'}
+            help={desc('STAGNANT_THRESHOLD') || '現在工程の滞留がこの日数以上で 🚩 表示。'}
+            effect="一覧の「滞留状況」列・KPI「滞留N日以上」・部品詳細のフラグ（再計算不要）"
             value={val('STAGNANT_THRESHOLD', '10')}
             dirty={dirty('STAGNANT_THRESHOLD')}
             onChange={(v) => setVal('STAGNANT_THRESHOLD', v)}
             onSave={() => saveKey('STAGNANT_THRESHOLD')}
+            row={byKey.get('STAGNANT_THRESHOLD')}
+            preview={
+              <>
+                <div className="param-preview-title">🚩 滞留フラグの件数（現在の滞留日数で判定）</div>
+                <div className="param-preview-row">
+                  <span>現状（{stagSaved}日以上）</span>
+                  <span className="pill yellow">{stagCurrent} 件</span>
+                </div>
+                <div className="param-preview-row">
+                  <span>この設定だと（{stagDraft}日以上）</span>
+                  <span className="pill yellow">{stagPreview} 件</span>
+                  {stagPreviewDiffers ? <span className="param-delta">変わる</span> : <span className="param-delta ok">変化なし</span>}
+                </div>
+              </>
+            }
           />
           <div className="param-field">
             <label>最終納期の採用元</label>
             <p className="mnote">{desc('DUE_SOURCE') || '一覧・詳細に表示する最終納期の出典。'}</p>
+            <p className="param-effect">再計算後：最終納期・残日数・バッファが、選んだデータソース基準に切り替わります。</p>
             <div className="param-inline">
-              <select value={val('DUE_SOURCE', 'flexsche')} onChange={(e) => setVal('DUE_SOURCE', e.target.value)}>
+              <select value={dueSource} onChange={(e) => setVal('DUE_SOURCE', e.target.value)}>
                 <option value="flexsche">flexsche（小日程）</option>
                 <option value="pbs">pbs（計画納期）</option>
               </select>
@@ -164,6 +196,13 @@ export function ParamEditor({ rows, parts, onSave }: Props) {
                 保存
               </button>
             </div>
+            <p className="mnote" style={{ marginBottom: 0 }}>
+              {dueSource === 'flexsche'
+                ? '小日程の最終工程日（JND）を最終納期として採用します。'
+                : 'PBS計画納期（月）を月末日として最終納期に採用します。'}
+              {dirty('DUE_SOURCE') && ' 保存すると、部品ごとの納期・色が更新されます。'}
+            </p>
+            <UpdatedMeta row={byKey.get('DUE_SOURCE') ?? {}} />
           </div>
         </div>
       </div>
@@ -175,23 +214,30 @@ function ParamField({
   label,
   unit,
   help,
+  effect,
+  preview,
   value,
   dirty,
   onChange,
   onSave,
+  row,
 }: {
   label: string;
   unit: string;
   help: string;
+  effect?: string;
+  preview?: ReactNode;
   value: string;
   dirty: boolean;
   onChange: (v: string) => void;
   onSave: () => void;
+  row?: Row;
 }) {
   return (
     <div className="param-field">
       <label>{label}</label>
       <p className="mnote">{help}</p>
+      {effect && <p className="param-effect">変更すると：{effect}</p>}
       <div className="param-inline">
         <input type="number" value={value} onChange={(e) => onChange(e.target.value)} />
         <span>{unit}</span>
@@ -199,6 +245,8 @@ function ParamField({
           保存
         </button>
       </div>
+      {preview && <div className="param-preview">{preview}</div>}
+      {row && <UpdatedMeta row={row} />}
     </div>
   );
 }

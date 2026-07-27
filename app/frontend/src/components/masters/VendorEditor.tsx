@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Row } from './shared';
 import { str } from './shared';
+import { UpdatedMeta } from './RowHistory';
 
 type Props = {
   rows: Row[];
@@ -38,6 +39,7 @@ export function VendorEditor({ rows, onSave, onDelete }: Props) {
         <p className="mnote">
           注文番号の先頭（プレフィックス）が一致すると、タイムラインに外注先名を表示します。長いプレフィックスが優先されます。
         </p>
+        <p className="param-effect">変更すると：部品詳細タイムラインの外注先名（gvendor）表示が変わります。再計算不要で保存後すぐ反映されます。</p>
         <div className="test-box">
           <label>注文番号で確認</label>
           <div className="param-inline">
@@ -59,6 +61,7 @@ export function VendorEditor({ rows, onSave, onDelete }: Props) {
                 <th>注文番号プレフィックス</th>
                 <th>外注先名</th>
                 <th>有効</th>
+                <th>最終更新</th>
                 <th />
               </tr>
             </thead>
@@ -87,6 +90,9 @@ export function VendorEditor({ rows, onSave, onDelete }: Props) {
                           setDrafts((p) => ({ ...p, [pk]: { ...(p[pk] ?? {}), active: e.target.checked } }))
                         }
                       />
+                    </td>
+                    <td>
+                      <UpdatedMeta row={row} />
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <button
@@ -132,6 +138,7 @@ export function VendorEditor({ rows, onSave, onDelete }: Props) {
                 <td>
                   <input type="checkbox" checked readOnly />
                 </td>
+                <td />
                 <td>
                   <button
                     type="button"

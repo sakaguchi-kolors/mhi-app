@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
+import type { Part } from '../../types';
 import type { Row } from './shared';
 import { str } from './shared';
+import { UpdatedMeta } from './RowHistory';
 
 type Props = {
   rows: Row[];
+  parts: Part[];
   onSave: (row: Row, isNew: boolean) => Promise<void>;
   onDelete: (date: unknown) => Promise<void>;
 };
@@ -13,7 +16,7 @@ function ymd(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-export function CalendarEditor({ rows, onSave, onDelete }: Props) {
+export function CalendarEditor({ rows, parts, onSave, onDelete }: Props) {
   const holidayMap = useMemo(() => {
     const m = new Map<string, Row>();
     for (const r of rows) {
@@ -59,6 +62,16 @@ export function CalendarEditor({ rows, onSave, onDelete }: Props) {
     (r) => r.is_workday === false || r.is_workday === 'false',
   ).length;
 
+  const holidays = useMemo(
+    () =>
+      [...holidayMap.values()]
+        .filter((r) => r.is_workday === false || r.is_workday === 'false')
+        .sort((a, b) => str(a.cal_date).localeCompare(str(b.cal_date))),
+    [holidayMap],
+  );
+
+  const tightBuffer = useMemo(() => parts.filter((p) => p.buffer <= 2).length, [parts]);
+
   return (
     <div className="master-forms">
       <div className="master-card">
@@ -66,6 +79,21 @@ export function CalendarEditor({ rows, onSave, onDelete }: Props) {
         <p className="mnote">
           日付をクリックして休日にします。休日は残日数計算から除外されます。未登録の日は暦日どおりです（登録休日: {holidayCount}日）。
         </p>
+        <p className="param-effect">変更すると：残日数・バッファ（余裕日数）→ 一覧の緊急度色が変わります。</p>
+        <div className="param-preview">
+          <div className="param-preview-title">影響の目安（現在の部品データ）</div>
+          <div className="param-preview-row">
+            <span>登録休日</span>
+            <span className="pill yellow">{holidayCount} 日</span>
+          </div>
+          <div className="param-preview-row">
+            <span>バッファ2日以下の部品（休日追加で色が変わりやすい）</span>
+            <span className="pill red">{tightBuffer} 件</span>
+          </div>
+          <p className="mnote" style={{ marginBottom: 0 }}>
+            休日の追加・解除は保存後すぐ一覧に反映されます。
+          </p>
+        </div>
         <div className="cal-nav">
           <button type="button" className="mbtn" onClick={() => shift(-1)}>
             ← 前月
@@ -88,25 +116,47 @@ export function CalendarEditor({ rows, onSave, onDelete }: Props) {
             const iso = ymd(cell);
             const row = holidayMap.get(iso);
             const isHoliday = row && (row.is_workday === false || row.is_workday === 'false');
-            const isOddWork = row && !isHoliday;
             return (
               <button
                 key={iso}
                 type="button"
-                className={`cal-cell ${isHoliday ? 'holiday' : ''} ${isOddWork ? 'work-reg' : ''} ${busy === iso ? 'busy' : ''}`}
+                className={`cal-cell ${isHoliday ? 'holiday' : ''} ${busy === iso ? 'busy' : ''}`}
                 onClick={() => toggle(iso)}
                 title={isHoliday ? 'クリックで休日解除' : 'クリックで休日にする'}
               >
                 <span className="cal-day">{cell.getDate()}</span>
                 {isHoliday && <span className="cal-tag">休</span>}
-                {isOddWork && <span className="cal-tag muted">登</span>}
               </button>
             );
           })}
         </div>
-        <p className="mnote" style={{ marginBottom: 0 }}>
-          「休」= 休日（残日数から除外）／「登」= 稼働日として登録済み（効果はほぼありません）
-        </p>
+        {holidays.length > 0 && (
+          <div className="table-wrap" style={{ marginTop: 16 }}>
+            <table className="mtable">
+              <thead>
+                <tr>
+                  <th>日付</th>
+                  <th>摘要</th>
+                  <th>最終更新</th>
+                </tr>
+              </thead>
+              <tbody>
+                {holidays.map((row) => {
+                  const iso = str(row.cal_date).slice(0, 10);
+                  return (
+                    <tr key={iso}>
+                      <td>{iso}</td>
+                      <td>{str(row.note) || '休日'}</td>
+                      <td>
+                        <UpdatedMeta row={row} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -18,6 +18,7 @@ function facetOptions(arr: string[], sel: string): string[] {
 interface Props {
   parts: Part[];
   owners: string[];
+  stagnantThreshold?: number;
   admin?: boolean;
   defaultOwnerFilter?: string; // 工程員は自分の担当のみ表示
   onAutoAssign?: () => void;
@@ -30,7 +31,7 @@ interface Props {
 
 type ChipFilter = 'all' | 'risk' | 'red' | 'yellow' | 'green' | 'stag';
 
-export function PartsList({ parts, owners, admin, defaultOwnerFilter, onAutoAssign, onOpen, onOwner, onTrouble, onShelved, onMemo }: Props) {
+export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaultOwnerFilter, onAutoAssign, onOpen, onOwner, onTrouble, onShelved, onMemo }: Props) {
   const [filter, setFilter] = useState<ChipFilter>('all');
   const [cat, setCat] = useState('all');
   const [owner, setOwner] = useState(defaultOwnerFilter ?? 'all');
@@ -49,8 +50,9 @@ export function PartsList({ parts, owners, admin, defaultOwnerFilter, onAutoAssi
   const toggleFilter = (next: ChipFilter) => setFilter((cur) => (cur === next ? 'all' : next));
 
   // 各フィルタを適用（except で指定した1軸だけ無視）。連動フィルタの選択肢算出にも使う
+  // showShelved=false: 通常一覧（保留を除外） / true: 保留部品のみ
   const match = useCallback((p: Part, except: 'cat' | 'kishu' | 'owner' | 'chip' | null) => {
-    if (!showShelved && p.shelved) return false;
+    if (p.shelved !== showShelved) return false;
     if (except !== 'cat' && cat !== 'all' && p.category !== cat) return false;
     if (except !== 'kishu' && kishu !== 'all' && p.kishu !== kishu) return false;
     if (except !== 'owner' && owner !== 'all' && (p.owner ?? '未割当') !== owner) return false;
@@ -59,10 +61,10 @@ export function PartsList({ parts, owners, admin, defaultOwnerFilter, onAutoAssi
       if (filter === 'red' && p.color !== 'red') return false;
       if (filter === 'yellow' && p.color !== 'yellow') return false;
       if (filter === 'green' && p.color !== 'green') return false;
-      if (filter === 'stag' && p.stagnant < 10) return false;
+      if (filter === 'stag' && p.stagnant < stagnantThreshold) return false;
     }
     return true;
-  }, [cat, kishu, owner, filter, showShelved]);
+  }, [cat, kishu, owner, filter, showShelved, stagnantThreshold]);
 
   const filtered = useMemo(() => parts.filter((p) => match(p, null)), [parts, match]);
 
@@ -81,11 +83,11 @@ export function PartsList({ parts, owners, admin, defaultOwnerFilter, onAutoAssi
     const un = (p: Part) => (p.owner ?? '未割当') === '未割当';
     return {
       r: cnt((p) => p.color === 'red'), y: cnt((p) => p.color === 'yellow'),
-      g: cnt((p) => p.color === 'green'), s: cnt((p) => p.stagnant >= 10),
+      g: cnt((p) => p.color === 'green'), s: cnt((p) => p.stagnant >= stagnantThreshold),
       ru: cnt((p) => p.color === 'red' && un(p)), yu: cnt((p) => p.color === 'yellow' && un(p)),
-      su: cnt((p) => p.stagnant >= 10 && un(p)),
+      su: cnt((p) => p.stagnant >= stagnantThreshold && un(p)),
     };
-  }, [parts, match]);
+  }, [parts, match, stagnantThreshold]);
 
   const columns = useMemo<ColumnDef<Part>[]>(() => [
     {
@@ -127,13 +129,13 @@ export function PartsList({ parts, owners, admin, defaultOwnerFilter, onAutoAssi
     {
       id: 'stag', header: '滞留状況', accessorFn: (p) => p.stagnant, sortingFn: (a, b) => b.original.stagnant - a.original.stagnant,
       cell: ({ row }) => {
-        const p = row.original; const flag = p.stagnant >= 10;
+        const p = row.original; const flag = p.stagnant >= stagnantThreshold;
         // セルの `flag` クラスがバッジ用 .flag{display:inline-block} と衝突するため、縦並びを明示
         return (
           <div className={`stag-cell ${flag ? 'flag' : 'ok'}`}
             style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
             <span className="stag-days">{p.stagnant}<span className="u">日</span></span>
-            {flag ? <span className="flag stag">🚩10日超</span> : <span className="stag-ok">問題なし</span>}
+            {flag ? <span className="flag stag">🚩{stagnantThreshold}日超</span> : <span className="stag-ok">問題なし</span>}
           </div>
         );
       },
@@ -208,7 +210,7 @@ export function PartsList({ parts, owners, admin, defaultOwnerFilter, onAutoAssi
         );
       },
     },
-  ], [owners, onOwner, onTrouble, onShelved]);
+  ], [owners, onOwner, onTrouble, onShelved, stagnantThreshold]);
 
   const table = useReactTable({
     data: filtered, columns,
@@ -245,8 +247,8 @@ export function PartsList({ parts, owners, admin, defaultOwnerFilter, onAutoAssi
           <div className="num">{kpi.g}</div><div className="lbl">🟢 余裕あり</div>
         </button>
         <button type="button" className={`kpi stag ${filter === 'stag' ? 'active' : ''}`}
-          onClick={() => toggleFilter('stag')} title="滞留10日以上の部品だけ表示">
-          <div className="num">{kpi.s}</div><div className="lbl">🚩 滞留10日以上</div>{sub(kpi.su, kpi.s)}
+          onClick={() => toggleFilter('stag')} title={`滞留${stagnantThreshold}日以上の部品だけ表示`}>
+          <div className="num">{kpi.s}</div><div className="lbl">🚩 滞留{stagnantThreshold}日以上</div>{sub(kpi.su, kpi.s)}
         </button>
       </div>
 
@@ -269,8 +271,8 @@ export function PartsList({ parts, owners, admin, defaultOwnerFilter, onAutoAssi
         <span
           className={`chip ${showShelved ? 'active' : ''}`}
           onClick={() => setShowShelved((v) => !v)}
-          title="通常は非表示の保留部品を一覧に含める">
-          保留を表示{shelvedCount > 0 ? `（${shelvedCount}）` : ''}
+          title="保留にした部品だけを表示">
+          保留だけ表示{shelvedCount > 0 ? `（${shelvedCount}）` : ''}
         </span>
         {admin && onAutoAssign && (
           <button className="chip assign-btn" onClick={onAutoAssign}

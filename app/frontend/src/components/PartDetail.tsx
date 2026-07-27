@@ -6,12 +6,12 @@ const gmap: Record<string, [string, string]> = {
   blue: ['gaic', '外注・順調/クリア'], yellow: ['gwait', '外注・要確認'], red: ['gred', '外注・払出待ち'],
 };
 
-export function PartDetail({ part: p, onBack, onNote }: { part: Part; onBack: () => void; onNote: (id: string, note: string) => void }) {
+export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: { part: Part; stagnantThreshold?: number; onBack: () => void; onNote: (id: string, note: string) => void }) {
   const [note, setNote] = useState(p.note ?? '');
   useEffect(() => { setNote(p.note ?? ''); }, [p.id, p.note]);
 
   const need = p.remainShops * 4;
-  const flag = p.stagnant >= 10;
+  const flag = p.stagnant >= stagnantThreshold;
 
   return (
     <section>
@@ -67,7 +67,8 @@ export function PartDetail({ part: p, onBack, onNote }: { part: Part; onBack: ()
             <div className={`stag-box ${flag ? 'flag' : 'ok'}`}>
               <div className="stag-num">{p.stagnant}<span style={{ fontSize: 14 }}>日</span></div>
               <div style={{ fontSize: 12 }}>現在Shop（{p.currentShop}）での滞留日数<br />
-                {flag ? <b style={{ color: 'var(--red)' }}>🚩 10日以上：レッドフラッグ</b> : '10日未満：問題なし'}</div>
+                {flag ? <b style={{ color: 'var(--red)' }}>🚩 {stagnantThreshold}日以上：レッドフラッグ</b> : `${stagnantThreshold}日未満：問題なし`}
+              </div>
             </div>
             <div style={{ marginTop: 6 }}>
               {p.urgent && <span className="flag urg">赤紙（緊急品）</span>}

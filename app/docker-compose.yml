@@ -13,7 +13,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - mhi_pgdata:/var/lib/postgresql/data
+      # PG18+ は /var/lib/postgresql をマウント（data 直下は非推奨）
+      - mhi_pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mop -d mop"]
       interval: 5s

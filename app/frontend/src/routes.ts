@@ -9,10 +9,10 @@ export const routes = {
   owners: '/owners',
   masters: '/masters',
   master: (name: string) => `/masters/${encodeURIComponent(name)}`,
-  users: '/users',
+  masterHistory: '/masters/history',
 } as const;
 
-export type ScreenKey = 'parts' | 'detail' | 'troubles' | 'ingest' | 'owners' | 'masters' | 'users';
+export type ScreenKey = 'parts' | 'detail' | 'troubles' | 'ingest' | 'owners' | 'masters';
 
 /** パスからサイドバーアクティブ判定用の画面キー */
 export function screenFromPath(pathname: string): ScreenKey {
@@ -21,7 +21,6 @@ export function screenFromPath(pathname: string): ScreenKey {
   if (pathname === routes.ingest) return 'ingest';
   if (pathname === routes.owners) return 'owners';
   if (pathname === routes.masters || pathname.startsWith(`${routes.masters}/`)) return 'masters';
-  if (pathname === routes.users) return 'users';
   return 'parts';
 }
 
@@ -40,5 +39,4 @@ export const PAGE_TITLES: Record<ScreenKey, string> = {
   ingest: 'データ取込',
   owners: '担当者',
   masters: 'マスタ管理',
-  users: 'ユーザー管理',
 };

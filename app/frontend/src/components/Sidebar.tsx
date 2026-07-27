@@ -16,7 +16,6 @@ const NAV: NavItem[] = [
   { path: routes.ingest, label: 'データ取込', icon: '↓', adminOnly: true },
   { path: routes.owners, label: '担当者', icon: '👤', adminOnly: true },
   { path: routes.masters, label: 'マスタ管理', icon: '⚙', adminOnly: true },
-  { path: routes.users, label: 'ユーザー管理', icon: '🔑', adminOnly: true },
 ];
 
 const LS_KEY = 'mhi_sidebar_collapsed';

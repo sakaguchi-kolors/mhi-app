@@ -119,7 +119,7 @@ export class PartsService {
     let userId: number | null = null;
     if (ownerName !== '未割当') {
       const u = await this.prisma.user.findFirst({ where: { displayName: ownerName, active: true } });
-      if (!u) throw new BadRequestException(`担当者「${ownerName}」が見つかりません（ユーザー管理で登録してください）`);
+      if (!u) throw new BadRequestException(`担当者「${ownerName}」が見つかりません（担当者画面で登録してください）`);
       if (u.role === '管理者') throw new BadRequestException('管理者は担当者に割り当てできません');
       userId = u.userId;
     }

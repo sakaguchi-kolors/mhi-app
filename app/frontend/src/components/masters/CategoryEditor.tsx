@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
+import type { Part } from '../../types';
 import type { Row } from './shared';
-import { num, str } from './shared';
+import { classifyPart, num, str } from './shared';
+import { UpdatedMeta } from './RowHistory';
 
 type Props = {
   rows: Row[];
+  parts: Part[];
   onSave: (row: Row, isNew: boolean) => Promise<void>;
   onDelete: (id: unknown) => Promise<void>;
 };
@@ -16,7 +19,7 @@ function safeRe(pattern: string): RegExp | null {
   }
 }
 
-export function CategoryEditor({ rows, onSave, onDelete }: Props) {
+export function CategoryEditor({ rows, parts, onSave, onDelete }: Props) {
   const [drafts, setDrafts] = useState<Record<string, Row>>({});
   const [newRow, setNewRow] = useState<Row>({ pattern: '', category: '', priority: 100, active: true });
   const [testPartNo, setTestPartNo] = useState('');
@@ -40,6 +43,22 @@ export function CategoryEditor({ rows, onSave, onDelete }: Props) {
     return { category: 'その他', pattern: '', priority: -1 };
   }, [viewRows, testPartNo]);
 
+  const previewRows = useMemo(() => {
+    const pattern = str(newRow.pattern).trim();
+    const category = str(newRow.category).trim();
+    if (!pattern || !category || !safeRe(pattern)) return viewRows;
+    return [...viewRows, { ...newRow, pattern, category, priority: num(newRow.priority, 100), active: true }];
+  }, [viewRows, newRow]);
+
+  const categoryImpact = useMemo(() => {
+    const changed: { partNo: string; from: string; to: string }[] = [];
+    for (const p of parts) {
+      const to = classifyPart(p.partNo, previewRows);
+      if (p.category !== to) changed.push({ partNo: p.partNo, from: p.category, to });
+    }
+    return changed;
+  }, [parts, previewRows]);
+
   return (
     <div className="master-forms">
       <div className="master-card">
@@ -47,6 +66,40 @@ export function CategoryEditor({ rows, onSave, onDelete }: Props) {
         <p className="mnote">
           部品番号に正規表現を当て、優先度が小さい順に最初の一致を分類にします。どれにも当たらなければ「その他」です。
         </p>
+        <p className="param-effect">変更すると：部品一覧の「完成品分類」列が変わります。</p>
+        <div className="param-preview">
+          <div className="param-preview-title">分類が変わる部品（編集中・追加行を含む試算）</div>
+          <div className="param-preview-row">
+            <span>現状の部品データ</span>
+            <span className="pill yellow">{categoryImpact.length} 件が変わる</span>
+            {categoryImpact.length === 0 && <span className="param-delta ok">変化なし</span>}
+          </div>
+          {categoryImpact.length > 0 && (
+            <div className="table-wrap" style={{ marginTop: 8 }}>
+              <table className="mtable">
+                <thead>
+                  <tr>
+                    <th>部品番号</th>
+                    <th>変更前</th>
+                    <th>変更後</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categoryImpact.slice(0, 8).map((c) => (
+                    <tr key={c.partNo}>
+                      <td>{c.partNo}</td>
+                      <td>{c.from}</td>
+                      <td>{c.to}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {categoryImpact.length > 8 && (
+                <p className="mnote" style={{ margin: '8px 0 0' }}>他 {categoryImpact.length - 8} 件…</p>
+              )}
+            </div>
+          )}
+        </div>
         <div className="test-box">
           <label>部品番号で確認</label>
           <div className="param-inline">
@@ -75,6 +128,7 @@ export function CategoryEditor({ rows, onSave, onDelete }: Props) {
                 <th>分類</th>
                 <th>優先度</th>
                 <th>有効</th>
+                <th>最終更新</th>
                 <th />
               </tr>
             </thead>
@@ -122,12 +176,15 @@ export function CategoryEditor({ rows, onSave, onDelete }: Props) {
                         }
                       />
                     </td>
+                    <td>
+                      <UpdatedMeta row={row} />
+                    </td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <button
                         type="button"
                         className="mbtn save"
                         onClick={async () => {
-                          await onSave({ ...row, ...(drafts[id] ?? {}) }, false);
+                          await onSave({ id: row.id, ...row, ...(drafts[id] ?? {}) }, false);
                           setDrafts((p) => {
                             const n = { ...p };
                             delete n[id];
@@ -137,7 +194,12 @@ export function CategoryEditor({ rows, onSave, onDelete }: Props) {
                       >
                         保存
                       </button>{' '}
-                      <button type="button" className="mbtn del" onClick={() => onDelete(row.id)}>
+                      <button
+                        type="button"
+                        className="mbtn del"
+                        disabled={row.id == null || row.id === ''}
+                        onClick={() => onDelete(row.id)}
+                      >
                         削除
                       </button>
                     </td>
@@ -171,6 +233,7 @@ export function CategoryEditor({ rows, onSave, onDelete }: Props) {
                 <td>
                   <input type="checkbox" checked readOnly />
                 </td>
+                <td />
                 <td>
                   <button
                     type="button"

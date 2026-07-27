@@ -1,6 +1,7 @@
 import type { ColDef, MasterDef } from '../../types';
 import type { Row } from './shared';
 import { str } from './shared';
+import { UpdatedMeta } from './RowHistory';
 
 type Props = {
   def: MasterDef;
@@ -21,6 +22,7 @@ export function MasterTable({ def, rows, newRow, setNewRow, onChangeCell, onSave
             {def.columns.map((c) => (
               <th key={c.key}>{c.label}</th>
             ))}
+            <th>最終更新</th>
             <th />
           </tr>
         </thead>
@@ -30,6 +32,9 @@ export function MasterTable({ def, rows, newRow, setNewRow, onChangeCell, onSave
               {def.columns.map((c) => (
                 <td key={c.key}>{cellInput(c, row[c.key], (v) => onChangeCell(i, c.key, v), false)}</td>
               ))}
+              <td>
+                <UpdatedMeta row={row} />
+              </td>
               <td style={{ whiteSpace: 'nowrap' }}>
                 <button type="button" className="mbtn save" onClick={() => onSave(row, false)}>
                   保存
@@ -46,6 +51,7 @@ export function MasterTable({ def, rows, newRow, setNewRow, onChangeCell, onSave
                 {cellInput(c, newRow[c.key], (v) => setNewRow({ ...newRow, [c.key]: v }), true)}
               </td>
             ))}
+            <td />
             <td>
               <button type="button" className="mbtn add" onClick={() => onSave(newRow, true)}>
                 ＋追加

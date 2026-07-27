@@ -53,6 +53,7 @@ export interface ColDef {
   type: 'text' | 'number' | 'bool' | 'select' | 'date';
   options?: string[];
   readonly?: boolean;
+  required?: boolean;
 }
 export interface MasterDef {
   name: string;
@@ -68,6 +69,7 @@ export interface Meta {
   asOf: string;
   owners: string[];
   dueSource: string;
+  stagnantThreshold: number;
 }
 export interface AuditRow {
   app_user: string;
@@ -75,6 +77,16 @@ export interface AuditRow {
   target: string;
   ref: string;
   at: string;
+}
+export interface AuditDetailRow extends AuditRow {
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+}
+export interface AuditSearchResult {
+  items: AuditDetailRow[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 // 取込（指定フォルダ→UI手動取込）

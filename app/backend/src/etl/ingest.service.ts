@@ -148,7 +148,7 @@ export class IngestService {
     // バックグラウンド実行（レスポンスは即返す）。完了時に状態と監査ログを更新。
     void (async () => {
       try {
-        const summary = await this.etl.runEtl();
+        const summary = await this.etl.runEtl({ user });
         job.result = { parts: summary.parts, timeline: summary.timeline, colors: await this.colorCounts() };
         job.state = 'done';
         await this.audit.record(user, 'ingest', 'batch', this.config.csvDir, null, job.result);

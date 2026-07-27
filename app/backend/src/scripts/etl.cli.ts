@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn', 'log'] });
   const etl = app.get(EtlService);
   if (recompute) await etl.recompute();
-  else await etl.runEtl({ dry });
+  else await etl.runEtl({ dry, user: 'etl-cli' });
   await app.close();
 }
 main().catch((e) => {

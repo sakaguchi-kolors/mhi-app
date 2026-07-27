@@ -6,6 +6,7 @@ export interface MetaResponse {
   asOf: string;
   owners: string[];
   dueSource: string;
+  stagnantThreshold: number;
 }
 
 @Controller('meta')
@@ -23,11 +24,16 @@ export class MetaController {
       orderBy: { displayName: 'asc' },
       select: { displayName: true },
     });
-    const ds = await this.prisma.param.findUnique({ where: { key: 'DUE_SOURCE' }, select: { value: true } });
+    const [ds, st] = await Promise.all([
+      this.prisma.param.findUnique({ where: { key: 'DUE_SOURCE' }, select: { value: true } }),
+      this.prisma.param.findUnique({ where: { key: 'STAGNANT_THRESHOLD' }, select: { value: true } }),
+    ]);
+    const stagnantThreshold = Number(st?.value ?? this.config.stagnantThreshold);
     return {
       asOf: this.config.asOf,
       owners: ['未割当', ...users.map((u) => u.displayName)],
       dueSource: ds?.value ?? this.config.dueSource,
+      stagnantThreshold: Number.isFinite(stagnantThreshold) ? stagnantThreshold : 10,
     };
   }
 }

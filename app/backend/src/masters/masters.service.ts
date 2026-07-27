@@ -7,6 +7,8 @@ import { MASTERS, masterByName, type ColDef, type MasterDef } from './masters.de
 
 type Row = Record<string, unknown>;
 
+const AUDIT_COLS = new Set(['created_at', 'created_by', 'updated_at', 'updated_by']);
+
 function coerce(col: ColDef, v: unknown): unknown {
   if (v === '' || v === undefined || v === null) return null;
   if (col.type === 'number') return Number(v);
@@ -32,7 +34,7 @@ function colParam(col: ColDef, idx: number): string {
   return `$${idx}`;
 }
 
-/** date 列を YYYY-MM-DD に正規化（JSONのタイムゾーンずれ防止） */
+/** date / timestamptz 列を JSON フレンドリーに正規化 */
 function normalizeRow(def: MasterDef, row: Row | undefined): Row | undefined {
   if (!row) return row;
   const out: Row = { ...row };
@@ -46,8 +48,13 @@ function normalizeRow(def: MasterDef, row: Row | undefined): Row | undefined {
       out[c.key] = String(v).slice(0, 10);
     }
   }
+  for (const k of ['created_at', 'updated_at'] as const) {
+    const v = out[k];
+    if (v instanceof Date) out[k] = v.toISOString();
+  }
   // Decimal 等を JSON フレンドリーに
   for (const [k, v] of Object.entries(out)) {
+    if (AUDIT_COLS.has(k)) continue;
     if (v != null && typeof v === 'object' && !(v instanceof Date) && 'toFixed' in (v as object)) {
       out[k] = String(v);
     }
@@ -57,6 +64,37 @@ function normalizeRow(def: MasterDef, row: Row | undefined): Row | undefined {
 
 function normalizeRows(def: MasterDef, rows: Row[]): Row[] {
   return rows.map((r) => normalizeRow(def, r)!);
+}
+
+function editableCols(def: MasterDef, body: Row): string[] {
+  return def.columns.map((c) => c.key).filter((k) => k in body && !AUDIT_COLS.has(k));
+}
+
+function isBlank(v: unknown): boolean {
+  if (v == null || v === '') return true;
+  if (typeof v === 'string') return !v.trim();
+  return false;
+}
+
+function validateBody(def: MasterDef, body: Row): void {
+  for (const c of def.columns) {
+    if (!c.required) continue;
+    if (isBlank(body[c.key])) {
+      throw new BadRequestException(`${c.label}を入力してください`);
+    }
+  }
+  if (!def.autoId && isBlank(body[def.pk])) {
+    const pkCol = def.columns.find((c) => c.key === def.pk);
+    throw new BadRequestException(`${pkCol?.label ?? '主キー'}を入力してください`);
+  }
+}
+
+function masterErrorMessage(e: unknown): string {
+  const msg = String(e);
+  if (msg.includes('23502')) return '必須項目が未入力です';
+  if (msg.includes('23505')) return '同じキーのデータが既に存在します';
+  if (msg.includes('22P02')) return '入力値の形式が正しくありません';
+  return '保存に失敗しました';
 }
 
 @Injectable()
@@ -85,9 +123,10 @@ export class MastersService {
   /** 新規/更新（自動採番キー／自然キーの両対応）。監査ログに記録する。 */
   async upsertRow(name: string, user: string, body: Row): Promise<Row> {
     const def = this.def(name);
+    validateBody(def, body);
     const colOf = (k: string): ColDef => def.columns.find((c) => c.key === k) ?? { key: k, label: k, type: 'text' };
     const pkVal = body[def.pk];
-    const cols = def.columns.map((c) => c.key).filter((k) => k in body);
+    const cols = editableCols(def, body);
 
     try {
       if (def.autoId && pkVal != null && pkVal !== '') {
@@ -101,7 +140,7 @@ export class MastersService {
             )
           )[0],
         );
-        const set = cols.map((k, i) => `${k}=${colParam(colOf(k), i + 2)}`).join(',');
+        const set = [...cols.map((k, i) => `${k}=${colParam(colOf(k), i + 2)}`), `updated_at=now()`, `updated_by=$${cols.length + 2}`].join(',');
         const vals = cols.map((k) => coerce(colOf(k), body[k]));
         const row = normalizeRow(
           def,
@@ -110,6 +149,7 @@ export class MastersService {
               `UPDATE ${def.table} SET ${set} WHERE ${def.pk}=${pkParam(def, 1)} RETURNING *`,
               pkVal,
               ...vals,
+              user,
             )
           )[0],
         )!;
@@ -120,12 +160,15 @@ export class MastersService {
         // 自動採番の新規
         const vals = cols.map((k) => coerce(colOf(k), body[k]));
         const ph = cols.map((k, i) => colParam(colOf(k), i + 1)).join(',');
+        const userIdx = cols.length + 1;
         const row = normalizeRow(
           def,
           (
             await this.prisma.$queryRawUnsafe<Row[]>(
-              `INSERT INTO ${def.table}(${cols.join(',')}) VALUES(${ph}) RETURNING *`,
+              `INSERT INTO ${def.table}(${cols.join(',')},created_at,created_by,updated_at,updated_by)
+               VALUES(${ph},now(),$${userIdx},now(),$${userIdx}) RETURNING *`,
               ...vals,
+              user,
             )
           )[0],
         )!;
@@ -147,29 +190,37 @@ export class MastersService {
         : null;
       const vals = allCols.map((k) => coerce(colOf(k), body[k]));
       const ph = allCols.map((k, i) => colParam(colOf(k), i + 1)).join(',');
-      const upd = allCols
-        .filter((k) => k !== def.pk)
-        .map((k) => `${k}=EXCLUDED.${k}`)
-        .join(',');
+      const userIdx = allCols.length + 1;
+      const upd = [
+        ...allCols.filter((k) => k !== def.pk).map((k) => `${k}=EXCLUDED.${k}`),
+        'updated_at=now()',
+        `updated_by=$${userIdx}`,
+      ].join(',');
       const row = normalizeRow(
         def,
         (
           await this.prisma.$queryRawUnsafe<Row[]>(
-            `INSERT INTO ${def.table}(${allCols.join(',')}) VALUES(${ph})
-           ON CONFLICT (${def.pk}) DO UPDATE SET ${upd} RETURNING *`,
+            `INSERT INTO ${def.table}(${allCols.join(',')},created_at,created_by,updated_at,updated_by)
+             VALUES(${ph},now(),$${userIdx},now(),$${userIdx})
+             ON CONFLICT (${def.pk}) DO UPDATE SET ${upd} RETURNING *`,
             ...vals,
+            user,
           )
         )[0],
       )!;
-      await this.audit.record(user, before ? 'master.update' : 'master.insert', def.table, String(pkVal), before, row);
+      await this.audit.record(user, before ? 'master.update' : 'master.insert', def.table, String(pkVal ?? row[def.pk]), before, row);
       return row;
     } catch (e) {
-      throw new BadRequestException(String(e));
+      if (e instanceof BadRequestException) throw e;
+      throw new BadRequestException(masterErrorMessage(e));
     }
   }
 
   async deleteRow(name: string, user: string, id: string): Promise<{ ok: true }> {
     const def = this.def(name);
+    if (def.autoId && !/^\d+$/.test(id)) {
+      throw new BadRequestException('削除対象のIDが不正です');
+    }
     try {
       const before = normalizeRow(
         def,
@@ -184,7 +235,8 @@ export class MastersService {
       await this.audit.record(user, 'master.delete', def.table, id, before, null);
       return { ok: true };
     } catch (e) {
-      throw new BadRequestException(String(e));
+      if (e instanceof BadRequestException) throw e;
+      throw new BadRequestException('削除に失敗しました');
     }
   }
 }

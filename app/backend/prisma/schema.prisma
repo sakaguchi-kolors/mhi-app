@@ -166,9 +166,13 @@ model Owner {
 
 // パラメータ設定 m_param（画面編集）: 2.7の外出し値
 model Param {
-  key         String  @id
+  key         String   @id
   value       String
   description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  createdBy   String?  @map("created_by")
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz()
+  updatedBy   String?  @map("updated_by")
 
   @@map("m_param")
 }
@@ -176,20 +180,28 @@ model Param {
 // 中間マイルストン定義 m_milestone（画面編集）
 //   matchType: shop(完全一致) / shop_prefix(前方一致) / name_contains(名称部分一致)
 model Milestone {
-  id        Int     @id @default(autoincrement())
-  matchType String  @map("match_type")
+  id        Int      @id @default(autoincrement())
+  matchType String   @map("match_type")
   pattern   String
   label     String?
-  active    Boolean @default(true)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  createdBy String?  @map("created_by")
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz()
+  updatedBy String?  @map("updated_by")
 
   @@map("m_milestone")
 }
 
 // Shop別標準LTマスタ m_shop_lt: 未登録Shopは既定LTを使用
 model ShopLt {
-  shop   String  @id
-  ltDays Decimal @map("lt_days") @db.Decimal
-  active Boolean @default(true)
+  shop      String   @id
+  ltDays    Decimal  @map("lt_days") @db.Decimal
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  createdBy String?  @map("created_by")
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz()
+  updatedBy String?  @map("updated_by")
 
   @@map("m_shop_lt")
 }
@@ -199,6 +211,10 @@ model Calendar {
   calDate   DateTime @id @map("cal_date") @db.Date
   isWorkday Boolean  @default(false) @map("is_workday")
   note      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  createdBy String?  @map("created_by")
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz()
+  updatedBy String?  @map("updated_by")
 
   @@map("m_calendar")
 }
@@ -209,17 +225,25 @@ model Vendor {
   vendorName  String   @map("vendor_name")
   returnLt    Decimal? @map("return_lt") @db.Decimal
   active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  createdBy   String?  @map("created_by")
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz()
+  updatedBy   String?  @map("updated_by")
 
   @@map("m_vendor")
 }
 
 // 完成品分類マスタ m_category: 部品番号パターン→分類。priority昇順で最初の一致を採用
 model Category {
-  id       Int     @id @default(autoincrement())
-  pattern  String // 正規表現（部品番号に対して）
-  category String
-  priority Int     @default(100)
-  active   Boolean @default(true)
+  id        Int      @id @default(autoincrement())
+  pattern   String // 正規表現（部品番号に対して）
+  category  String
+  priority  Int      @default(100)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  createdBy String?  @map("created_by")
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz()
+  updatedBy String?  @map("updated_by")
 
   @@map("m_category")
 }
@@ -254,6 +278,7 @@ model AuditLog {
   after   Json?
   at      DateTime @default(now()) @db.Timestamptz()
 
+  @@index([target, ref, id(sort: Desc)], map: "idx_audit_log_target_ref")
   @@map("t_audit_log")
 }
 
