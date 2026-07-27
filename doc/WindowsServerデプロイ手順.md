@@ -91,7 +91,7 @@ git clone https://github.com/sakaguchi-kolors/mhi-app.git
 cd mhi-app\app\deploy
 ```
 
-**Git が使えない場合**
+**Git が使えない場合（非推奨）**
 
 1. 開発 PC から GitHub の ZIP をダウンロード
 2. `C:\apps\mhi-app\` に展開
@@ -99,6 +99,10 @@ cd mhi-app\app\deploy
 ```powershell
 cd C:\apps\mhi-app\app\deploy
 ```
+
+> **注意:** ZIP 展開だけだと `.git` がなく、後から `git pull` できません。  
+> `deploy.ps1` は `Skipping git pull (not a git repo)` と表示して**手元の古いソースを再ビルドするだけ**になります。  
+> 初回から `git clone` を推奨します。既に ZIP 配置済みの場合は [4-5. Git リポジトリがない場合](#4-5-git-リポジトリがない場合) を参照してください。
 
 ### 3-5. 初回セットアップ実行
 
@@ -206,7 +210,8 @@ cd C:\apps\mhi-app\app\deploy
 `deploy.ps1` が行うこと:
 
 ```text
-git pull
+git pull（.git がある場合のみ。なければスキップ）
+  → Windows Service 停止（Prisma DLL ロック解除）
   → backend:  npm ci → build → prisma migrate deploy
   → frontend: npm ci → build
   → C:\inetpub\mhi へフロント配置
@@ -216,9 +221,13 @@ git pull
 
 **5〜10 分** 程度。ダウンタイムは Service 再起動の **数秒** です。
 
-#### Git を使わない場合
+> **`Deploy complete` だけでは反映確認にならない**  
+> コンソールに `Skipping git pull (not a git repo)` が出ていた場合、ソースは更新されていません。  
+> [4-6. 反映確認](#4-6-反映確認) を必ず実施してください。
 
-1. 新しいソースを `C:\apps\mhi-app\` に上書きコピー
+#### Git を使わない場合（ソースを手動で上書きしたとき）
+
+1. 新しいソースを `C:\apps\mhi-app\` に上書きコピー（`backend\.env` は消さない）
 2. 実行:
 
 ```powershell
@@ -268,6 +277,79 @@ CSV を差し替えたあと ETL を実行すると DB が更新されます。
 cd C:\apps\mhi-app\app\backend
 npm run recompute
 ```
+
+### 4-5. Git リポジトリがない場合
+
+初回を ZIP 展開したなどで `C:\apps\mhi-app` に `.git` がないと、`git pull` は使えません。  
+**既存フォルダを Git 化して最新 `main` を取得する**方法（`.env` を保持）:
+
+```powershell
+cd C:\apps
+Stop-Service MhiProgressApi -Force
+Stop-Website -Name MhiApp -ErrorAction SilentlyContinue
+
+Copy-Item C:\apps\mhi-app\app\backend\.env C:\apps\backend.env.backup -Force
+
+cd C:\apps\mhi-app
+git init
+git remote add origin https://github.com/sakaguchi-kolors/mhi-app.git
+git fetch origin
+git checkout -f -B main origin/main
+
+Copy-Item C:\apps\backend.env.backup C:\apps\mhi-app\app\backend\.env -Force
+
+cd app\deploy
+.\deploy.ps1
+
+Start-Website -Name MhiApp
+```
+
+`git remote add origin` で「already exists」と出た場合:
+
+```powershell
+git remote set-url origin https://github.com/sakaguchi-kolors/mhi-app.git
+git fetch origin
+git checkout -f -B main origin/main
+```
+
+**別フォルダへ clone し直す場合**（`Rename-Item` で「in use」が出るときはこちら）:
+
+1. `C:\apps\mhi-app` 内で開いている PowerShell をすべて閉じる
+2. Service / IIS サイトを停止してから実行:
+
+```powershell
+cd C:\apps
+Stop-Service MhiProgressApi -Force
+Stop-Website -Name MhiApp -ErrorAction SilentlyContinue
+
+Copy-Item C:\apps\mhi-app\app\backend\.env C:\apps\backend.env.backup -Force
+
+git clone https://github.com/sakaguchi-kolors/mhi-app.git mhi-app-new
+Copy-Item C:\apps\backend.env.backup C:\apps\mhi-app-new\app\backend\.env -Force
+
+Rename-Item C:\apps\mhi-app C:\apps\mhi-app.old
+Rename-Item C:\apps\mhi-app-new C:\apps\mhi-app
+
+cd mhi-app\app\deploy
+.\deploy.ps1
+Start-Website -Name MhiApp
+```
+
+### 4-6. 反映確認
+
+デプロイ後、**ブラウザのキャッシュ清除だけでは不十分**なことがあります。サーバー側で次を確認:
+
+```powershell
+# ソースが最新か
+cd C:\apps\mhi-app
+git log -1 --oneline
+
+# 配信 JS が新ビルドか（ファイル名ハッシュが deploy 前後で変わる）
+dir C:\inetpub\mhi\assets\index-*.js
+Select-String -Path C:\inetpub\mhi\assets\index-*.js -Pattern "保留だけ表示"
+```
+
+ブラウザでは、サイドバー・機能が期待どおりか確認（例: 旧 UI の「ユーザー管理」が消えている、保留フィルタが「保留だけ表示」になっている等）。
 
 ---
 
@@ -327,6 +409,11 @@ C:\inetpub\mhi\           IIS 配信（frontend/dist + web.config）
 
 | 症状 | 対処 |
 |------|------|
+| deploy 成功したが画面が古い | `git log -1` / `Skipping git pull` の有無を確認 → [4-5](#4-5-git-リポジトリがない場合) |
+| `fatal: not a git repository` | `.git` がない → [4-5](#4-5-git-リポジトリがない場合) で Git 化または clone し直し |
+| `Rename-Item ... because it is in use` | `mhi-app` 内の PowerShell を閉じ、Service / IIS 停止後に再実行 → [4-5](#4-5-git-リポジトリがない場合) |
+| `npm EPERM ... query_engine-windows.dll.node` | `Stop-Service MhiProgressApi -Force` してから `deploy.ps1`（スクリプト内でも停止するが、手動停止で確実に） |
+| `Restart-Service : Failed to start` | `logs\api.err.log` を確認。backend の `npm ci` / `build` 失敗時に起きやすい |
 | IIS 初期画面（Welcome） | `Stop-Website "Default Web Site"` → `Start-Website "MhiApp"` |
 | 502 / API 不通 | `Get-Service MhiProgressApi` / `logs\api.err.log` |
 | ログインできない | HTTPS 化後は `COOKIE_SECURE=true` に |
@@ -379,7 +466,10 @@ Import-Module WebAdministration; Stop-Website "Default Web Site"; Start-Website 
 ```powershell
 cd C:\apps\mhi-app\app\deploy
 .\deploy.ps1
+git log -1 --oneline   # 反映確認（任意）
 ```
+
+`.git` がない場合は §4-5 を参照。
 
 ### CSV 更新
 
