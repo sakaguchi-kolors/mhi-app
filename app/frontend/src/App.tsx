@@ -251,14 +251,8 @@ export function App() {
     mutate(() => api.setNote(id, note), () => updatePart(id, { note }));
 
   const onRecompute = async () => {
-    try {
-      const r = await api.recompute();
-      await reload();
-      toast.show(`再計算完了：${r.parts}部品を更新`);
-    } catch (e) {
-      console.error(e);
-      toast.show('再計算に失敗しました');
-    }
+    await api.recompute();
+    await reload();
   };
 
   const onAutoAssign = async () => {

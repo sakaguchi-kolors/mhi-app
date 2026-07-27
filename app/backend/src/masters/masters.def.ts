@@ -30,7 +30,7 @@ export const MASTERS: MasterDef[] = [
     group: 'edit',
     pk: 'key',
     autoId: false,
-    note: '緊急度の色・所要日数・納期の採用元など。編集後は「再計算」で反映。',
+    note: '緊急度の色・所要日数・納期の採用元など。保存すると一覧に自動反映されます。',
     columns: [
       { key: 'key', label: 'キー', type: 'text', readonly: true },
       { key: 'value', label: '値', type: 'text', required: true },
@@ -87,7 +87,7 @@ export const MASTERS: MasterDef[] = [
     group: 'import',
     pk: 'order_prefix',
     autoId: false,
-    note: '注文番号の前方一致で外注先名を表示（再計算不要・一覧再読込で反映）。',
+    note: '注文番号の前方一致で外注先名を表示。保存後すぐタイムラインに反映されます。',
     columns: [
       { key: 'order_prefix', label: '注文番号プレフィックス', type: 'text', required: true },
       { key: 'vendor_name', label: '外注先名', type: 'text', required: true },

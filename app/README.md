@@ -79,7 +79,7 @@ npm run dev                        # Vite HMR (:5173, /api→:8787)
 ## データ更新（バッチ再実行）
 
 - CSVを差し替えたら `cd backend && npm run etl` を再実行（取込は洗い替え。**担当者・困りごと・メモ（③）は保持**）。
-- マスタ編集後は画面の「🔄 再計算」または `npm run recompute`（CSVを読まず算出のみ＝高速）。
+- マスタ編集は保存時に一覧へ自動反映されます。CLI から手動実行する場合は `cd backend && npm run recompute`（CSVを読まず算出のみ＝高速）。
 - 本番は Windows タスクスケジューラが同じ `npm run etl`（`runEtl`）を定期起動。
 
 ## 主な設定（`.env`）

@@ -41,6 +41,12 @@ if (-not (Test-Path $envFile)) {
   throw ".env not found: $envFile"
 }
 
+if (Test-ServiceExists $ServiceName) {
+  Write-Step "Stopping Windows Service ($ServiceName)"
+  Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
+}
+
 Write-Step 'backend: npm ci && build'
 Push-Location $backend
 npm ci

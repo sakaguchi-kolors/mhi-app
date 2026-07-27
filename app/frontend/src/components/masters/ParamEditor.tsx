@@ -107,7 +107,7 @@ export function ParamEditor({ rows, parts, onSave }: Props) {
             {previewDiffers ? <span className="param-delta">変わる</span> : <span className="param-delta ok">変化なし</span>}
           </div>
           <p className="mnote" style={{ marginBottom: 0 }}>
-            ※ Shop LT・カレンダー変更でバッファ自体が変わる場合は、再計算後の件数と一致しないことがあります。
+            ※ Shop LT・カレンダー変更でバッファ自体が変わる場合は、保存後の件数と一致しないことがあります。
           </p>
         </div>
         <div className="param-actions">
@@ -162,7 +162,7 @@ export function ParamEditor({ rows, parts, onSave }: Props) {
             label="滞留日数の閾値"
             unit="日"
             help={desc('STAGNANT_THRESHOLD') || '現在工程の滞留がこの日数以上で 🚩 表示。'}
-            effect="一覧の「滞留状況」列・KPI「滞留N日以上」・部品詳細のフラグ（再計算不要）"
+            effect="一覧の「滞留状況」列・KPI「滞留N日以上」・部品詳細のフラグ（保存後すぐ反映）"
             value={val('STAGNANT_THRESHOLD', '10')}
             dirty={dirty('STAGNANT_THRESHOLD')}
             onChange={(v) => setVal('STAGNANT_THRESHOLD', v)}
@@ -186,7 +186,7 @@ export function ParamEditor({ rows, parts, onSave }: Props) {
           <div className="param-field">
             <label>最終納期の採用元</label>
             <p className="mnote">{desc('DUE_SOURCE') || '一覧・詳細に表示する最終納期の出典。'}</p>
-            <p className="param-effect">再計算後：最終納期・残日数・バッファが、選んだデータソース基準に切り替わります。</p>
+            <p className="param-effect">保存後：最終納期・残日数・バッファが、選んだデータソース基準に切り替わります。</p>
             <div className="param-inline">
               <select value={dueSource} onChange={(e) => setVal('DUE_SOURCE', e.target.value)}>
                 <option value="flexsche">flexsche（小日程）</option>

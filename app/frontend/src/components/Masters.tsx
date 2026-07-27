@@ -127,6 +127,9 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
         saveLastRecompute(iso);
         setLastApplied(iso);
         toast.show(action === 'save' ? '保存して反映しました' : '削除して反映しました');
+      } catch (e) {
+        console.error(e);
+        toast.show(errMsg(e, '一覧への反映に失敗しました'));
       } finally {
         setApplying(false);
       }
@@ -214,7 +217,7 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
           <strong>{applying ? '一覧へ反映中…' : '自動反映'}</strong>
           <span>
             {applying
-              ? '再計算して部品一覧を更新しています'
+              ? '部品一覧を更新しています'
               : `最終反映: ${fmtDateTime(lastApplied)}`}
           </span>
         </div>

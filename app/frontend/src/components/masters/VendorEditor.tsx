@@ -39,7 +39,7 @@ export function VendorEditor({ rows, onSave, onDelete }: Props) {
         <p className="mnote">
           注文番号の先頭（プレフィックス）が一致すると、タイムラインに外注先名を表示します。長いプレフィックスが優先されます。
         </p>
-        <p className="param-effect">変更すると：部品詳細タイムラインの外注先名（gvendor）表示が変わります。再計算不要で保存後すぐ反映されます。</p>
+        <p className="param-effect">変更すると：部品詳細タイムラインの外注先名（gvendor）表示が変わります。保存後すぐ反映されます。</p>
         <div className="test-box">
           <label>注文番号で確認</label>
           <div className="param-inline">
