@@ -8,7 +8,9 @@ const gmap: Record<string, [string, string]> = {
 
 export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: { part: Part; stagnantThreshold?: number; onBack: () => void; onNote: (id: string, note: string) => void }) {
   const [note, setNote] = useState(p.note ?? '');
-  useEffect(() => { setNote(p.note ?? ''); }, [p.id, p.note]);
+  // 部品切替時のみ初期化（p.note を依存に含めると refetch で入力中テキストが消える）
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- p.id のみ意図的
+  useEffect(() => { setNote(p.note ?? ''); }, [p.id]);
 
   const need = p.remainShops * 4;
   const flag = p.stagnant >= stagnantThreshold;
@@ -80,7 +82,7 @@ export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: 
             <h3 className="pt">対応メモ</h3>
             <p className="pt-sub">担当者の気づき・アクションを記録（試作）。</p>
             <textarea className="note-area" value={note}
-              onChange={(e) => setNote(e.target.value)} onBlur={() => onNote(p.id, note)}
+              onChange={(e) => setNote(e.target.value)} onBlur={() => { if (note !== (p.note ?? '')) onNote(p.id, note); }}
               placeholder="例：不働態化処理SHOPへ本日中に進捗確認。外注戻り予定を更新。" />
           </div>
         </div>

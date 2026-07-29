@@ -64,7 +64,7 @@ export class OwnersService {
       'm_user_kishu',
       `${userId}:${kishu}`,
       null,
-      null,
+      { userId, kishu, on },
     );
   }
 }

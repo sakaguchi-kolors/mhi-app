@@ -7,8 +7,8 @@ import { UpdatedMeta } from './RowHistory';
 type Props = {
   rows: Row[];
   parts: Part[];
-  onSave: (row: Row, isNew: boolean) => Promise<void>;
-  onDelete: (date: unknown) => Promise<void>;
+  onSave: (row: Row, isNew: boolean) => Promise<boolean>;
+  onDelete: (date: unknown) => Promise<boolean>;
 };
 
 function ymd(d: Date): string {

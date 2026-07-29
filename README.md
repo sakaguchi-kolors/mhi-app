@@ -17,9 +17,11 @@
 
 | ディレクトリ | 内容 |
 |-------------|------|
-| `app/` | 本番向けアプリ（NestJS + React + Prisma） |
+| `app/` | **本番向けアプリ**（NestJS + React + Prisma）。開発・改修はここ |
 | `doc/` | 設計書・デプロイ手順 |
-| `moc/` | 機能検証用プロトタイプ |
+| `moc/` | **参照専用**の旧プロトタイプ（Express + 生SQL）。`app/` へ移植済み。新規開発の対象外 |
+
+> 新規参加者は [`app/ONBOARDING.md`](app/ONBOARDING.md) から読んでください。`moc/` の ONBOARDING は旧構成向けです。
 
 ---
 
@@ -29,7 +31,7 @@
 cd app
 cp .env.example .env
 docker compose up -d
-cd backend && npm install && npm run prisma:deploy && npm run seed && npm run etl && npm run start
+cd backend && cp ../.env .env && npm install && npm run prisma:deploy && npm run seed && npm run etl && npm run start
 cd ../frontend && npm install && npm run dev
 ```
 
@@ -39,8 +41,17 @@ cd ../frontend && npm install && npm run dev
 
 ## クイックスタート（Windows Server デプロイ）
 
+先方本番は **GitHub 非利用**。開発側で納品 ZIP を作成し、サーバーへ受け渡します。
+
+```bash
+# 開発 PC（Mac）で納品 ZIP 作成
+cd app/deploy && ./make-release.sh
+```
+
 ```powershell
-git clone https://github.com/sakaguchi-kolors/mhi-app.git C:\apps\mhi-app
+# 先方サーバー（初回）
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+# 納品 ZIP を C:\apps\mhi-app\ に展開
 cd C:\apps\mhi-app\app\deploy
 .\setup-server.ps1
 ```

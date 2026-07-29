@@ -1,26 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AuditDetailRow, MasterDef } from '../../types';
 import * as api from '../../api';
 import { fmtDateTime, str } from './shared';
+import {
+  AUDIT_CSV_MAX_ROWS,
+  auditActionLabel,
+  auditCsvOverLimitMessage,
+  auditDiffFields,
+  auditDisplayVal,
+} from '@shared/audit';
 
 export const MASTER_HISTORY_TAB = 'history';
 
 const PAGE_SIZES = [20, 50, 100] as const;
 const DEFAULT_PAGE_SIZE = 50;
-export const CSV_MAX_ROWS = 10000;
-
-function csvOverLimitMessage(total: number): string {
-  return `該当件数が${total.toLocaleString('ja-JP')}件あります。CSV出力は最大${CSV_MAX_ROWS.toLocaleString('ja-JP')}件です。期間やマスタで絞り込んでください。`;
-}
-
-const ACTION_LABEL: Record<string, string> = {
-  'master.insert': '新規',
-  'master.update': '更新',
-  'master.delete': '削除',
-  'master.import': '取込',
-};
-
-const SKIP_KEYS = new Set(['created_at', 'created_by', 'updated_at', 'updated_by']);
+export { AUDIT_CSV_MAX_ROWS as CSV_MAX_ROWS };
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -32,17 +26,6 @@ function currentMonthRange(): { from: string; to: string } {
   const from = new Date(now.getFullYear(), now.getMonth(), 1);
   const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return { from: ymd(from), to: ymd(to) };
-}
-
-function formatVal(v: unknown): string {
-  if (v == null || v === '') return '—';
-  if (typeof v === 'boolean') return v ? 'はい' : 'いいえ';
-  return String(v);
-}
-
-function diffFields(before: Record<string, unknown> | null, after: Record<string, unknown> | null): string[] {
-  const keys = new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]);
-  return [...keys].filter((k) => !SKIP_KEYS.has(k) && formatVal(before?.[k]) !== formatVal(after?.[k]));
 }
 
 type Props = {
@@ -60,9 +43,11 @@ export function AuditSearch({ defs, toast }: Props) {
   const [rows, setRows] = useState<AuditDetailRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const reqSeq = useRef(0);
 
   const load = useCallback(
     async (overrides?: { page?: number; pageSize?: number }) => {
+      const seq = ++reqSeq.current;
       const pageNum = overrides?.page ?? page;
       const size = overrides?.pageSize ?? pageSize;
       setLoading(true);
@@ -75,17 +60,19 @@ export function AuditSearch({ defs, toast }: Props) {
           page: pageNum,
           pageSize: size,
         });
+        if (seq !== reqSeq.current) return;
         setRows(r.items);
         setTotal(r.total);
         setPage(r.page);
         setPageSize(r.pageSize);
       } catch (e) {
+        if (seq !== reqSeq.current) return;
         console.error(e);
         toast.show(e instanceof Error ? e.message : '履歴の検索に失敗しました');
         setRows([]);
         setTotal(0);
       } finally {
-        setLoading(false);
+        if (seq === reqSeq.current) setLoading(false);
       }
     },
     [from, to, target, page, pageSize, toast],
@@ -93,7 +80,6 @@ export function AuditSearch({ defs, toast }: Props) {
 
   useEffect(() => {
     load({ page: 1 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -105,8 +91,8 @@ export function AuditSearch({ defs, toast }: Props) {
   };
 
   const downloadCsv = async () => {
-    if (total > CSV_MAX_ROWS) {
-      toast.show(csvOverLimitMessage(total));
+    if (total > AUDIT_CSV_MAX_ROWS) {
+      toast.show(auditCsvOverLimitMessage(total));
       return;
     }
     try {
@@ -123,7 +109,7 @@ export function AuditSearch({ defs, toast }: Props) {
   };
 
   const tableLabel = (t: string) => defs.find((d) => d.table === t)?.label ?? t;
-  const csvBlocked = total > CSV_MAX_ROWS;
+  const csvBlocked = total > AUDIT_CSV_MAX_ROWS;
 
   return (
     <div className="audit-search">
@@ -156,10 +142,10 @@ export function AuditSearch({ defs, toast }: Props) {
           </button>
         </div>
         <p className="mnote" style={{ margin: '8px 0 0', width: '100%' }}>
-          CSV出力は最大 {CSV_MAX_ROWS.toLocaleString('ja-JP')} 件です。
+          CSV出力は最大 {AUDIT_CSV_MAX_ROWS.toLocaleString('ja-JP')} 件です。
           {csvBlocked && (
             <span className="param-warn" style={{ display: 'block', marginTop: 4 }}>
-              {csvOverLimitMessage(total)}
+              {auditCsvOverLimitMessage(total)}
             </span>
           )}
         </p>
@@ -180,17 +166,17 @@ export function AuditSearch({ defs, toast }: Props) {
           </thead>
           <tbody>
             {!loading &&
-              rows.map((r, i) => {
-                const fields = diffFields(r.before, r.after);
+              rows.map((r) => {
+                const fields = auditDiffFields(r.before, r.after);
                 const summary =
                   fields.length === 0
                     ? '—'
-                    : fields.map((k) => `${k}: ${formatVal(r.before?.[k])} → ${formatVal(r.after?.[k])}`).join(' / ');
+                    : fields.map((k) => `${k}: ${auditDisplayVal(r.before?.[k])} → ${auditDisplayVal(r.after?.[k])}`).join(' / ');
                 return (
-                  <tr key={i}>
+                  <tr key={r.ref}>
                     <td>{fmtDateTime(r.at)}</td>
                     <td>{r.app_user ?? '—'}</td>
-                    <td>{ACTION_LABEL[str(r.action)] ?? str(r.action)}</td>
+                    <td>{auditActionLabel(str(r.action)) || str(r.action)}</td>
                     <td>{tableLabel(str(r.target))}</td>
                     <td><code>{r.ref}</code></td>
                     <td className="audit-diff">{summary}</td>

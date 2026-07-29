@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { OwnerRow } from '../types';
 import * as api from '../api';
+import { useAuth } from '../context/AuthContext';
 import type { ToastState } from './Toast';
 import { KishuMultiSelect } from './KishuMultiSelect';
 
@@ -14,6 +15,7 @@ async function clearKishus(userId: number, list: string[]) {
 
 // 担当者＝ログインユーザー。表示名・メール・パスワード・役割・担当機種を編集。
 export function OwnerKishu({ toast }: { toast: ToastState }) {
+  const { me } = useAuth();
   const [kishus, setKishus] = useState<string[]>([]);
   const [owners, setOwners] = useState<OwnerRow[]>([]);
   const [passwords, setPasswords] = useState<Record<number, string>>({});
@@ -22,18 +24,8 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
   const load = useCallback(async () => {
     try {
       const d = await api.getOwners();
-      const stale = d.owners.filter((o) => !isEngineer(o.role) && o.kishus.length);
-      for (const o of stale) {
-        await clearKishus(o.user_id, o.kishus);
-      }
-      if (stale.length) {
-        const refreshed = await api.getOwners();
-        setKishus(refreshed.kishus);
-        setOwners(refreshed.owners);
-      } else {
-        setKishus(d.kishus);
-        setOwners(d.owners);
-      }
+      setKishus(d.kishus);
+      setOwners(d.owners);
       setPasswords({});
     } catch (e) {
       console.error(e);
@@ -47,18 +39,7 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
   const setField = (id: number, key: keyof OwnerRow, val: unknown) =>
     setOwners((prev) => prev.map((o) => (o.user_id === id ? { ...o, [key]: val } : o)));
 
-  const changeRole = async (o: OwnerRow, role: string) => {
-    if (!isEngineer(role) && o.kishus.length) {
-      try {
-        await clearKishus(o.user_id, o.kishus);
-        setOwners((prev) => prev.map((x) => (x.user_id === o.user_id ? { ...x, role, kishus: [] } : x)));
-      } catch (e) {
-        console.error(e);
-        toast.show('担当機種の解除に失敗しました');
-        load();
-      }
-      return;
-    }
+  const changeRole = (o: OwnerRow, role: string) => {
     setField(o.user_id, 'role', role);
   };
 
@@ -76,6 +57,9 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
         active: o.active,
         ...(password ? { password } : {}),
       });
+      if (!isEngineer(o.role) && o.kishus.length) {
+        await clearKishus(o.user_id, o.kishus);
+      }
       toast.show('保存しました');
       await load();
     } catch (e) {
@@ -112,12 +96,18 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
         displayName: newRow.displayName.trim() || newRow.email.trim(),
         role: newRow.role,
       });
-      for (const kishu of isEngineer(newRow.role) ? newRow.kishus : []) {
-        await api.toggleOwnerKishu(created.userId, kishu, true);
+      try {
+        for (const kishu of isEngineer(newRow.role) ? newRow.kishus : []) {
+          await api.toggleOwnerKishu(created.userId, kishu, true);
+        }
+        setNewRow({ email: '', displayName: '', password: '', role: '工程員', active: true, kishus: [] });
+        await load();
+        toast.show('追加しました');
+      } catch (e) {
+        console.error(e);
+        await load();
+        toast.show('ユーザーは作成済みですが、担当機種の設定に失敗しました');
       }
-      setNewRow({ email: '', displayName: '', password: '', role: '工程員', active: true, kishus: [] });
-      await load();
-      toast.show('追加しました');
     } catch (e) {
       console.error(e);
       toast.show(e instanceof Error ? e.message : '追加に失敗しました');
@@ -168,7 +158,9 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
               </tr>
             </thead>
             <tbody>
-              {owners.map((o) => (
+              {owners.map((o) => {
+                const isSelf = me?.userId === o.user_id;
+                return (
                 <tr key={o.user_id} className={o.active ? '' : 'row-inactive'}>
                   <td className="sticky-col col-name">
                     <input type="text" value={o.displayName} onChange={(e) => setField(o.user_id, 'displayName', e.target.value)} />
@@ -185,13 +177,13 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
                     />
                   </td>
                   <td className="col-role">
-                    <select value={o.role} onChange={(e) => void changeRole(o, e.target.value)}>
+                    <select value={o.role} disabled={isSelf} onChange={(e) => changeRole(o, e.target.value)}>
                       <option value="工程員">工程員</option>
                       <option value="管理者">管理者</option>
                     </select>
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <input type="checkbox" checked={o.active} onChange={(e) => setField(o.user_id, 'active', e.target.checked)} />
+                    <input type="checkbox" checked={o.active} disabled={isSelf} onChange={(e) => setField(o.user_id, 'active', e.target.checked)} />
                   </td>
                   <td className="col-kishu">
                     {isEngineer(o.role) ? (
@@ -207,12 +199,13 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button type="button" className="mbtn save" onClick={() => savePerson(o)}>保存</button>{' '}
-                    {o.active && (
+                    {o.active && !isSelf && (
                       <button type="button" className="mbtn del" onClick={() => deactivatePerson(o)}>無効化</button>
                     )}
                   </td>
                 </tr>
-              ))}
+              );
+              })}
               <tr style={{ background: '#f7faff' }}>
                 <td className="sticky-col col-name">
                   <input type="text" placeholder="表示名" value={newRow.displayName} onChange={(e) => setNewRow((p) => ({ ...p, displayName: e.target.value }))} />

@@ -1,8 +1,11 @@
 // 算出ロジック（設計仕様書 2章準拠）
 // マスタ駆動：色境界・マイルストン定義・Shop別LT・稼働日カレンダーを外部から注入できる。
 // 既定引数は現状（v0.1）の挙動を再現する。
-import type { Color, GaicStatus, Part, RoutingRow, TimelineCell } from '../common/types';
+import type { GaicStatus, Part, RoutingRow, TimelineCell } from '../common/types';
+import { bufferColor } from '../shared/domain';
 import type { MilestoneRule } from '../masters/masters.util';
+
+export { bufferColor };
 
 export interface CalcOptions {
   shopLtDays: number;
@@ -48,12 +51,7 @@ export function ymd(d: Date | null): string {
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** バッファ→色（2.3）。既定: 1以上=緑 / 0=黄 / マイナス=赤 */
-export function bufferColor(buffer: number, green = 1, yellow = 0): Color {
-  if (buffer >= green) return 'green';
-  if (buffer >= yellow) return 'yellow';
-  return 'red';
-}
+/** バッファ→色（2.3）。shared/domain.ts へ移動済み。後方互換のため re-export */
 
 /** 検査（マイルストン）Shop判定（2.4）。rules未指定時は組込みヒューリスティック */
 export function isMilestone(shop: string, name: string, rules?: MilestoneRule[]): boolean {
@@ -158,6 +156,8 @@ export function computePart(
   const remainShops = allDone ? 0 : total - currentIdx;
 
   const finalDue = meta.finalDue;
+  // 仕様（要判断）: finalDue が null の部品は daysLeft=0 となり buffer も負になりやすく赤扱いになる。
+  // 納期不明と納期超過は現状区別されない。
   const daysLeft = finalDue ? dayDiff(finalDue, asOf, o.holidays) : 0;
   // 残Shop所要 = 残コマのLT合計（Shop別LT上書き対応）
   let need = 0;
@@ -179,6 +179,8 @@ export function computePart(
       const passed = status === 'done';
       cell.mpassed = passed;
       if (!passed) {
+        // 仕様（要判断）: マイルストン期日の逆算は暦日ベース（86400000ms/Shop）。
+        // 残日数(daysLeft)は稼働日ベース(dayDiff)と非対称。
         const msDue = finalDue
           ? new Date(finalDue.getTime() - (total - 1 - i) * o.milestoneLtDays * 86400000)
           : null;

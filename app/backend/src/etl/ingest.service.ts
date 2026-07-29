@@ -1,14 +1,14 @@
 // 指定フォルダ(CSV_DIR)からの取込：プリフライト＋非同期ジョブ＋状態管理。
-// 取込本体は EtlService.runEtl() を共有し、手動UI取込と将来の定期実行(タスクスケジューラ)で
-// 同一コアを使う（差はトリガーのみ）。破壊的操作なので呼び出し側で管理者に限定する。
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppConfigService } from '../config/app-config.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EtlService } from './etl.service';
+import { BatchLockService } from './batch-lock.service';
 import { readCsvHeader } from './csv';
+import { IngestJobStore } from './ingest-job.store';
 
 export interface IngestFileInfo {
   name: string;
@@ -49,19 +49,46 @@ export interface StartResult {
 }
 
 @Injectable()
-export class IngestService {
-  private currentJob: IngestJob | null = null; // 実行中（同時実行ロック）
-  private lastJob: IngestJob | null = null; // 直近の完了/失敗
+export class IngestService implements OnModuleInit {
+  private readonly logger = new Logger('Ingest');
+  private readonly store: IngestJobStore;
+  private currentJob: IngestJob | null = null;
+  private lastJob: IngestJob | null = null;
 
   constructor(
     private readonly config: AppConfigService,
     private readonly prisma: PrismaService,
     private readonly etl: EtlService,
     private readonly audit: AuditService,
-  ) {}
+    private readonly batchLock: BatchLockService,
+  ) {
+    this.store = new IngestJobStore(this.config.ingestJobFile);
+  }
 
-  // 各取込ファイルと、ヘッダに最低限必要なカラム。
-  // フォーマット違い・エンコーディング取り違えを取込前に弾くための軽量検証。
+  onModuleInit(): void {
+    const { current, last } = this.store.load();
+    if (current?.state === 'running') {
+      const recovered: IngestJob = {
+        ...current,
+        state: 'error',
+        error: 'サーバー再起動により中断されました',
+        finishedAt: new Date().toISOString(),
+        elapsedMs: Date.now() - new Date(current.startedAt).getTime(),
+      };
+      this.lastJob = recovered;
+      this.currentJob = null;
+      this.persist();
+      this.logger.warn(`前回の取込ジョブ ${current.id} は再起動で中断されました`);
+      return;
+    }
+    this.currentJob = current;
+    this.lastJob = last;
+  }
+
+  private persist(): void {
+    this.store.save(this.currentJob, this.lastJob);
+  }
+
   private expected(): { file: string; required: string[] }[] {
     const f = this.config.files;
     return [
@@ -123,17 +150,13 @@ export class IngestService {
     return c;
   }
 
-  /**
-   * 取込ジョブを起動する。プリフライトNGなら起動せずに理由を返す。
-   * runEtl は時間がかかるためレスポンスは即返し、進捗は ingestInfo() のジョブ状態で見せる。
-   */
   async startIngest(user: string): Promise<StartResult> {
-    if (this.currentJob) return { started: false, reason: 'busy', job: this.currentJob };
-    const files = await this.inspectFiles();
-    if (!this.preflightOk(files)) return { started: false, reason: 'preflight', files };
+    if (this.currentJob || this.batchLock.isLocked()) {
+      return { started: false, reason: 'busy', job: this.currentJob ?? undefined };
+    }
 
     const startedAt = new Date();
-    const job: IngestJob = {
+    const placeholder: IngestJob = {
       id: `ingest-${startedAt.getTime()}`,
       user,
       state: 'running',
@@ -143,9 +166,18 @@ export class IngestService {
       result: null,
       error: null,
     };
-    this.currentJob = job;
+    this.currentJob = placeholder;
+    this.persist();
 
-    // バックグラウンド実行（レスポンスは即返す）。完了時に状態と監査ログを更新。
+    const files = await this.inspectFiles();
+    if (!this.preflightOk(files)) {
+      this.currentJob = null;
+      this.persist();
+      return { started: false, reason: 'preflight', files };
+    }
+
+    const job = this.currentJob;
+
     void (async () => {
       try {
         const summary = await this.etl.runEtl({ user });
@@ -163,6 +195,7 @@ export class IngestService {
         job.elapsedMs = Date.now() - startedAt.getTime();
         this.lastJob = job;
         this.currentJob = null;
+        this.persist();
       }
     })();
 

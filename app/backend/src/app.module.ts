@@ -1,33 +1,29 @@
 import { Module } from '@nestjs/common';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AppConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
-import { PartsController } from './parts/parts.controller';
-import { PartsService } from './parts/parts.service';
-import { MetaController } from './meta/meta.controller';
-import { MastersController } from './masters/masters.controller';
-import { MastersService } from './masters/masters.service';
-import { OwnersController } from './owners/owners.controller';
-import { OwnersService } from './owners/owners.service';
-import { IngestController } from './etl/ingest.controller';
-import { IngestService } from './etl/ingest.service';
-import { EtlService } from './etl/etl.service';
-import { AuditController } from './audit/audit.controller';
-import { AuditService } from './audit/audit.service';
-import { AssignService } from './assign/assign.service';
-import { BatchController } from './batch/batch.controller';
+import { PartsModule } from './parts/parts.module';
+import { MetaModule } from './meta/meta.module';
+import { MastersModule } from './masters/masters.module';
+import { OwnersModule } from './owners/owners.module';
+import { EtlModule } from './etl/etl.module';
+import { AuditModule } from './audit/audit.module';
+import { BatchModule } from './batch/batch.module';
 
 @Module({
-  imports: [AppConfigModule, PrismaModule, AuthModule],
-  controllers: [
-    PartsController,
-    MetaController,
-    MastersController,
-    OwnersController,
-    IngestController,
-    AuditController,
-    BatchController,
+  imports: [
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    AppConfigModule,
+    PrismaModule,
+    AuthModule,
+    PartsModule,
+    MetaModule,
+    MastersModule,
+    OwnersModule,
+    EtlModule,
+    AuditModule,
+    BatchModule,
   ],
-  providers: [PartsService, MastersService, OwnersService, AssignService, EtlService, IngestService, AuditService],
 })
 export class AppModule {}

@@ -1,26 +1,9 @@
 // マスタの定義・既定シード（CRUD/UI と 算出 の両方が参照する単一の源のうち「定義」部分）
 // 算出用の読込は masters.util.ts（loadMasters）。
+import type { ColDef, MasterDef } from '../shared/types';
 
-// ---------- UI/CRUD 用のマスタ定義 ----------
-export type ColType = 'text' | 'number' | 'bool' | 'select' | 'date';
-export interface ColDef {
-  key: string;
-  label: string;
-  type: ColType;
-  options?: string[];
-  readonly?: boolean;
-  required?: boolean;
-}
-export interface MasterDef {
-  name: string; // URLスラグ
-  table: string;
-  label: string; // 画面表示名
-  group: 'edit' | 'import';
-  pk: string; // 主キー列
-  autoId: boolean; // 主キーが自動採番か
-  columns: ColDef[];
-  note?: string;
-}
+export type { ColDef, MasterDef };
+export type ColType = ColDef['type'];
 
 export const MASTERS: MasterDef[] = [
   {

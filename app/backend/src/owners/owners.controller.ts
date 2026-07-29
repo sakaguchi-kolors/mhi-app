@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { OwnersService, type OwnersData } from './owners.service';
 import { appUser } from '../common/app-user';
@@ -6,6 +7,8 @@ import { Roles } from '../auth/auth.decorators';
 
 @Roles('管理者')
 @Controller('owners')
+@ApiTags('owners')
+@ApiCookieAuth('mhi_token')
 export class OwnersController {
   constructor(private readonly owners: OwnersService) {}
 

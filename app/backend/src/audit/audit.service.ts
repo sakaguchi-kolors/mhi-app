@@ -1,6 +1,17 @@
 // 操作監査ログ（設計仕様書1.3）。マスタ編集・取込・再計算・割当などを記録する。
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  AUDIT_CSV_MAX_ROWS,
+  auditActionLabel,
+  auditCompareVal,
+  auditCsvEscape,
+  auditCsvOverLimitMessage,
+  auditDiffFields,
+  auditFmtAt,
+} from '../shared/audit';
+
+export { AUDIT_CSV_MAX_ROWS as CSV_MAX_ROWS };
 
 export interface AuditRow {
   app_user: string | null;
@@ -35,16 +46,7 @@ export interface AuditSearchResult {
   pageSize: number;
 }
 
-const SKIP_KEYS = new Set(['created_at', 'created_by', 'updated_at', 'updated_by']);
 const DEFAULT_PAGE_SIZE = 50;
-export const CSV_MAX_ROWS = 10000;
-
-const ACTION_LABEL: Record<string, string> = {
-  'master.insert': '新規',
-  'master.update': '更新',
-  'master.delete': '削除',
-  'master.import': '取込',
-};
 
 function jstDayStart(ymd: string): Date {
   return new Date(`${ymd}T00:00:00+09:00`);
@@ -52,26 +54,6 @@ function jstDayStart(ymd: string): Date {
 
 function jstDayEnd(ymd: string): Date {
   return new Date(`${ymd}T23:59:59.999+09:00`);
-}
-
-function formatVal(v: unknown): string {
-  if (v == null || v === '') return '';
-  if (typeof v === 'boolean') return v ? 'はい' : 'いいえ';
-  return String(v);
-}
-
-function diffFields(before: Record<string, unknown> | null, after: Record<string, unknown> | null): string[] {
-  const keys = new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]);
-  return [...keys].filter((k) => !SKIP_KEYS.has(k) && formatVal(before?.[k]) !== formatVal(after?.[k]));
-}
-
-function csvEscape(v: string): string {
-  if (/[",\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
-  return v;
-}
-
-function fmtAt(iso: string): string {
-  return iso.replace('T', ' ').slice(0, 19);
 }
 
 function mapRow(r: {
@@ -118,6 +100,29 @@ export class AuditService {
     });
   }
 
+  async recordMany(
+    entries: Array<{
+      user: string;
+      action: string;
+      target: string;
+      ref: string;
+      before: unknown;
+      after: unknown;
+    }>,
+  ): Promise<void> {
+    if (entries.length === 0) return;
+    await this.prisma.auditLog.createMany({
+      data: entries.map((e) => ({
+        appUser: e.user,
+        action: e.action,
+        target: e.target,
+        ref: e.ref,
+        before: e.before === undefined || e.before === null ? undefined : (e.before as object),
+        after: e.after === undefined || e.after === null ? undefined : (e.after as object),
+      })),
+    });
+  }
+
   private where(opts: AuditQuery) {
     const atFilter: { gte?: Date; lte?: Date } = {};
     if (opts.from) atFilter.gte = jstDayStart(opts.from);
@@ -159,15 +164,13 @@ export class AuditService {
   async findAllForExport(opts: AuditQuery = {}): Promise<AuditDetailRow[]> {
     const where = this.where(opts);
     const total = await this.prisma.auditLog.count({ where });
-    if (total > CSV_MAX_ROWS) {
-      throw new BadRequestException(
-        `該当件数が${total.toLocaleString('ja-JP')}件あります。CSV出力は最大${CSV_MAX_ROWS.toLocaleString('ja-JP')}件です。期間やマスタで絞り込んでください。`,
-      );
+    if (total > AUDIT_CSV_MAX_ROWS) {
+      throw new BadRequestException(auditCsvOverLimitMessage(total));
     }
     const rows = await this.prisma.auditLog.findMany({
       where,
       orderBy: { id: 'desc' },
-      take: CSV_MAX_ROWS,
+      take: AUDIT_CSV_MAX_ROWS,
       select: { appUser: true, action: true, target: true, ref: true, at: true, before: true, after: true },
     });
     return rows.map(mapRow);
@@ -176,15 +179,15 @@ export class AuditService {
   /** 変更履歴を CSV 文字列に展開（1変更項目=1行） */
   exportCsv(rows: AuditDetailRow[]): string {
     const header = ['日時', '操作者', '操作', '対象', 'キー', '項目', '変更前', '変更後'];
-    const lines = [header.map(csvEscape).join(',')];
+    const lines = [header.map(auditCsvEscape).join(',')];
 
     for (const r of rows) {
-      const action = ACTION_LABEL[r.action ?? ''] ?? (r.action ?? '');
-      const fields = diffFields(r.before, r.after);
+      const action = auditActionLabel(r.action);
+      const fields = auditDiffFields(r.before, r.after);
       if (fields.length === 0) {
         lines.push(
-          [fmtAt(r.at), r.app_user ?? '', action, r.target ?? '', r.ref ?? '', '', '', '']
-            .map((c) => csvEscape(c))
+          [auditFmtAt(r.at), r.app_user ?? '', action, r.target ?? '', r.ref ?? '', '', '', '']
+            .map((c) => auditCsvEscape(c))
             .join(','),
         );
         continue;
@@ -192,16 +195,16 @@ export class AuditService {
       for (const field of fields) {
         lines.push(
           [
-            fmtAt(r.at),
+            auditFmtAt(r.at),
             r.app_user ?? '',
             action,
             r.target ?? '',
             r.ref ?? '',
             field,
-            formatVal(r.before?.[field]),
-            formatVal(r.after?.[field]),
+            auditCompareVal(r.before?.[field]),
+            auditCompareVal(r.after?.[field]),
           ]
-            .map((c) => csvEscape(c))
+            .map((c) => auditCsvEscape(c))
             .join(','),
         );
       }

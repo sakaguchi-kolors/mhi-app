@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Req } from '@nestjs/common';
+import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { MastersService } from './masters.service';
 import { appUser } from '../common/app-user';
@@ -7,6 +8,8 @@ import type { MasterDef } from './masters.def';
 
 @Roles('管理者')
 @Controller('masters')
+@ApiTags('masters')
+@ApiCookieAuth('mhi_token')
 export class MastersController {
   constructor(private readonly masters: MastersService) {}
 

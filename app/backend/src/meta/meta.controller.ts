@@ -1,39 +1,17 @@
 import { Controller, Get } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { AppConfigService } from '../config/app-config.service';
-
-export interface MetaResponse {
-  asOf: string;
-  owners: string[];
-  dueSource: string;
-  stagnantThreshold: number;
-}
+import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { MetaService } from './meta.service';
+import type { Meta } from '../shared/types';
 
 @Controller('meta')
+@ApiTags('meta')
+@ApiCookieAuth('mhi_token')
 export class MetaController {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly config: AppConfigService,
-  ) {}
+  constructor(private readonly meta: MetaService) {}
 
   @Get()
-  async meta(): Promise<MetaResponse> {
-    // 割当候補は工程員のみ（管理者は担当者として割り振らない）
-    const users = await this.prisma.user.findMany({
-      where: { active: true, role: '工程員' },
-      orderBy: { displayName: 'asc' },
-      select: { displayName: true },
-    });
-    const [ds, st] = await Promise.all([
-      this.prisma.param.findUnique({ where: { key: 'DUE_SOURCE' }, select: { value: true } }),
-      this.prisma.param.findUnique({ where: { key: 'STAGNANT_THRESHOLD' }, select: { value: true } }),
-    ]);
-    const stagnantThreshold = Number(st?.value ?? this.config.stagnantThreshold);
-    return {
-      asOf: this.config.asOf,
-      owners: ['未割当', ...users.map((u) => u.displayName)],
-      dueSource: ds?.value ?? this.config.dueSource,
-      stagnantThreshold: Number.isFinite(stagnantThreshold) ? stagnantThreshold : 10,
-    };
+  @ApiOperation({ summary: '基準日・担当者候補・DUE_SOURCE' })
+  getMeta(): Promise<Meta> {
+    return this.meta.getMeta();
   }
 }

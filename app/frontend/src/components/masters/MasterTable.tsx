@@ -9,8 +9,8 @@ type Props = {
   newRow: Row;
   setNewRow: (r: Row) => void;
   onChangeCell: (i: number, key: string, val: unknown) => void;
-  onSave: (row: Row, isNew: boolean) => void;
-  onDelete: (pkVal: unknown) => void;
+  onSave: (row: Row, isNew: boolean) => Promise<boolean>;
+  onDelete: (pkVal: unknown) => Promise<boolean>;
 };
 
 export function MasterTable({ def, rows, newRow, setNewRow, onChangeCell, onSave, onDelete }: Props) {
@@ -28,7 +28,7 @@ export function MasterTable({ def, rows, newRow, setNewRow, onChangeCell, onSave
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={str(row[def.pk]) + i}>
+            <tr key={str(row[def.pk])}>
               {def.columns.map((c) => (
                 <td key={c.key}>{cellInput(c, row[c.key], (v) => onChangeCell(i, c.key, v), false)}</td>
               ))}

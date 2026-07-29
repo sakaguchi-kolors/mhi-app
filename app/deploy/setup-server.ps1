@@ -3,20 +3,33 @@
 param(
   [switch]$SkipPostgresInstall,
   [switch]$SkipBasicAuth,
+  [switch]$InstallGit,
   [string]$RepoUrl = '',
   [string]$AppRoot = 'C:\apps\mhi-app',
   [string]$SiteRoot = 'C:\inetpub\mhi',
   [string]$SiteName = 'MhiApp',
   [string]$ServiceName = 'MhiProgressApi',
-  [string]$PgPassword = 'mhi_staging_pw',
+  [string]$PgPassword = '',
   [string]$BasicAuthUser = 'mhi',
-  [string]$BasicAuthPassword = 'ChangeMe123!'
+  [string]$BasicAuthPassword = ''
 )
 
 $ErrorActionPreference = 'Stop'
 
 function Write-Step([string]$Message) {
   Write-Host "`n==> $Message" -ForegroundColor Cyan
+}
+
+function New-RandomPassword {
+  param([int]$Length = 24)
+  $bytes = New-Object byte[] $Length
+  [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+  return [Convert]::ToBase64String($bytes).Substring(0, $Length) -replace '[+/=]', 'x'
+}
+
+function Write-Utf8NoBom([string]$Path, [string]$Content) {
+  $utf8 = New-Object System.Text.UTF8Encoding $false
+  [System.IO.File]::WriteAllText($Path, $Content, $utf8)
 }
 
 function Ensure-Chocolatey {
@@ -42,8 +55,8 @@ function Install-ChocoPackageSafe {
     [string]$Name,
     [string[]]$ExtraArgs = @()
   )
-  $args = @('install', $Name, '-y', '--no-progress') + $ExtraArgs
-  & choco @args 2>&1 | Out-Host
+  $chocoArgs = @('install', $Name, '-y', '--no-progress') + $ExtraArgs
+  & choco @chocoArgs 2>&1 | Out-Host
   if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 3010) { return }
   Write-Host "  choco $Name exited $LASTEXITCODE (continuing if already installed)" -ForegroundColor Yellow
 }
@@ -120,11 +133,24 @@ function New-JwtSecret {
   return [Convert]::ToBase64String($bytes)
 }
 
+if (-not $PgPassword) {
+  $PgPassword = New-RandomPassword
+  Write-Host "  Generated PostgreSQL password (save this): $PgPassword" -ForegroundColor Yellow
+}
+
+if (-not $BasicAuthPassword) {
+  $BasicAuthPassword = New-RandomPassword
+  Write-Host "  Generated Basic auth password (save this): $BasicAuthPassword" -ForegroundColor Yellow
+}
+
 Ensure-Chocolatey
 
-Write-Step 'Installing Node.js, Git, NSSM'
-Install-ChocoPackageSafe 'nodejs-lts'
-Install-ChocoPackageSafe 'git'
+Write-Step 'Installing Node.js, NSSM'
+Install-ChocoPackageSafe 'nodejs' @('--version=20.18.1')
+if ($InstallGit -or $RepoUrl) {
+  Write-Step 'Installing Git (optional; only needed for git-based deploy)'
+  Install-ChocoPackageSafe 'git'
+}
 Install-ChocoPackageSafe 'nssm'
 $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
 
@@ -163,11 +189,11 @@ if (-not (Test-Path $envTarget)) {
   Copy-Item $envExample $envTarget
   $jwt = New-JwtSecret
   $dbUrl = "postgresql://mop:${PgPassword}@localhost:5432/mop?schema=public"
-  (Get-Content $envTarget -Raw) `
+  $envContent = (Get-Content $envTarget -Raw) `
     -replace 'JWT_SECRET=.*', "JWT_SECRET=$jwt" `
     -replace 'PGPASSWORD=.*', "PGPASSWORD=$PgPassword" `
-    -replace 'DATABASE_URL=.*', "DATABASE_URL=$dbUrl" |
-    Set-Content $envTarget -Encoding UTF8
+    -replace 'DATABASE_URL=.*', "DATABASE_URL=$dbUrl"
+  Write-Utf8NoBom $envTarget $envContent
   Write-Host "  Created: $envTarget"
 }
 

@@ -1,0 +1,17 @@
+  /* ===== 認証（ログイン / セットアップ） ===== */
+  .auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#eaf0f9,var(--bg));padding:24px;}
+  .auth-card{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:28px 26px;display:flex;flex-direction:column;gap:14px;}
+  .auth-brand{font-size:15px;font-weight:800;color:var(--nav);} .auth-brand span{opacity:.5;font-weight:600;font-size:11px;}
+  .auth-title{margin:6px 0 0;font-size:20px;} .auth-sub{margin:0;color:var(--muted);font-size:12px;line-height:1.6;}
+  .auth-field{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted);}
+  .auth-field input{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;color:var(--text);}
+  .auth-field input:focus{outline:none;border-color:var(--info);box-shadow:0 0 0 3px var(--info-bg);}
+  .auth-err{background:var(--red-bg);border:1px solid var(--red-soft);color:var(--red);border-radius:10px;padding:9px 12px;font-size:12px;}
+  .auth-btn{margin-top:4px;background:var(--nav);color:#fff;border:none;border-radius:10px;padding:11px 14px;font-size:14px;font-weight:700;cursor:pointer;}
+  .auth-btn:disabled{opacity:.5;cursor:not-allowed;}
+
+  /* ===== ヘッダのユーザー表示 ===== */
+  .user-chip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:12px;color:var(--text);font-weight:700;}
+  .user-chip em{font-style:normal;font-size:10px;color:var(--muted);background:var(--bg);border-radius:8px;padding:2px 6px;}
+
+  .row-inactive{opacity:.55;}

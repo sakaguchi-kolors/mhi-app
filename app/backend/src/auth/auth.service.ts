@@ -1,17 +1,14 @@
 // 認証サービス：メールアドレス＋パスワードでログイン。初回管理者セットアップ・ユーザー管理。
 import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import type { PublicUser } from '../shared/types';
 import type { JwtUser } from './jwt-auth.guard';
 
-export interface PublicUser {
-  userId: number;
-  email: string;
-  displayName: string;
-  role: string;
-  active: boolean;
-}
+export type { PublicUser };
+
 export interface CreateUserInput {
   email?: unknown;
   password?: unknown;
@@ -30,6 +27,11 @@ export class AuthService {
 
   async hasAnyUser(): Promise<boolean> {
     return (await this.prisma.user.count()) > 0;
+  }
+
+  async getUserById(userId: number): Promise<PublicUser | null> {
+    const u = await this.prisma.user.findUnique({ where: { userId } });
+    return u ? this.toPublic(u) : null;
   }
 
   private normalizeEmail(raw: unknown): string {
@@ -64,6 +66,24 @@ export class AuthService {
     return this.toPublic(u);
   }
 
+  private async assertNotLastAdmin(userId: number, nextActive: boolean, nextRole: string): Promise<void> {
+    const current = await this.prisma.user.findUnique({ where: { userId } });
+    if (!current || current.role !== '管理者' || !current.active) return;
+    const demoting = nextActive === false || nextRole !== '管理者';
+    if (!demoting) return;
+    const adminCount = await this.prisma.user.count({ where: { role: '管理者', active: true } });
+    if (adminCount <= 1) {
+      throw new BadRequestException('最後の管理者は無効化・降格できません');
+    }
+  }
+
+  private handleUniqueError(e: unknown): never {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      throw new BadRequestException('そのメールアドレスは既に登録されています');
+    }
+    throw e;
+  }
+
   async createUser(input: CreateUserInput): Promise<PublicUser> {
     const email = this.normalizeEmail(input.email);
     const password = String(input.password ?? '');
@@ -72,25 +92,41 @@ export class AuthService {
     this.assertEmail(email);
     if (!password) throw new BadRequestException('パスワードは必須です');
     if (password.length < 8) throw new BadRequestException('パスワードは8文字以上にしてください');
-    const exists = await this.prisma.user.findUnique({ where: { email } });
-    if (exists) throw new BadRequestException('そのメールアドレスは既に登録されています');
     const passwordHash = await bcrypt.hash(password, 10);
-    const u = await this.prisma.user.create({ data: { email, displayName, role, passwordHash } });
-    return this.toPublic(u);
+    try {
+      const u = await this.prisma.user.create({ data: { email, displayName, role, passwordHash } });
+      return this.toPublic(u);
+    } catch (e) {
+      this.handleUniqueError(e);
+    }
   }
 
   async setupFirstAdmin(input: CreateUserInput): Promise<PublicUser> {
-    if (await this.hasAnyUser()) throw new ForbiddenException('既に管理者が登録されています');
-    return this.createUser({ ...input, role: '管理者' });
+    const email = this.normalizeEmail(input.email);
+    const password = String(input.password ?? '');
+    const displayName = String(input.displayName ?? '').trim() || email;
+    this.assertEmail(email);
+    if (!password) throw new BadRequestException('パスワードは必須です');
+    if (password.length < 8) throw new BadRequestException('パスワードは8文字以上にしてください');
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const count = await tx.user.count();
+        if (count > 0) throw new ForbiddenException('既に管理者が登録されています');
+        const passwordHash = await bcrypt.hash(password, 10);
+        const u = await tx.user.create({
+          data: { email, displayName, role: '管理者', passwordHash },
+        });
+        return this.toPublic(u);
+      });
+    } catch (e) {
+      this.handleUniqueError(e);
+    }
   }
 
   async listUsers(): Promise<PublicUser[]> {
     const us = await this.prisma.user.findMany({ orderBy: { userId: 'asc' } });
     return us.map((u) => this.toPublic(u));
-  }
-
-  async setActive(userId: number, active: boolean): Promise<void> {
-    await this.prisma.user.update({ where: { userId }, data: { active } });
   }
 
   /** 担当者（ユーザー）情報の更新 */
@@ -103,8 +139,6 @@ export class AuthService {
     if (input.email != null) {
       const email = this.normalizeEmail(input.email);
       this.assertEmail(email);
-      const dup = await this.prisma.user.findFirst({ where: { email, NOT: { userId } } });
-      if (dup) throw new BadRequestException('そのメールアドレスは既に登録されています');
       data.email = email;
     }
     if (input.password != null && String(input.password) !== '') {
@@ -122,7 +156,16 @@ export class AuthService {
 
     if (Object.keys(data).length === 0) throw new BadRequestException('更新項目がありません');
 
-    const u = await this.prisma.user.update({ where: { userId }, data });
-    return this.toPublic(u);
+    const current = await this.prisma.user.findUnique({ where: { userId } });
+    if (!current) throw new BadRequestException('ユーザーが見つかりません');
+
+    await this.assertNotLastAdmin(userId, data.active ?? current.active, data.role ?? current.role);
+
+    try {
+      const u = await this.prisma.user.update({ where: { userId }, data });
+      return this.toPublic(u);
+    } catch (e) {
+      this.handleUniqueError(e);
+    }
   }
 }

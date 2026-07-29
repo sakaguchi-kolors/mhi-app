@@ -1,6 +1,6 @@
 // API クライアント（契約は据え置き＝バックの /api/* をそのまま呼ぶ）。
 // 認証は httpOnly Cookie。全リクエストで credentials を送る。
-import type { Part, Meta, MasterDef, AuditRow, AuditDetailRow, AuditSearchResult, IngestInfo, IngestJob, IngestFile, OwnersData } from './types';
+import type { Part, Meta, MasterDef, AuditRow, AuditSearchResult, IngestInfo, IngestJob, IngestFile, OwnersData } from './types';
 
 // 認証ユーザー
 export interface Me {
@@ -17,6 +17,9 @@ const withCreds = (o: RequestInit = {}): RequestInit => ({ credentials: 'include
 
 async function j<T>(r: Response): Promise<T> {
   if (!r.ok) {
+    if (r.status === 401) {
+      window.dispatchEvent(new Event('auth:expired'));
+    }
     // NestExceptionのbody（{message}）があればユーザー向けメッセージとして拾う
     let msg = `API ${r.status} ${r.statusText}`;
     try {
@@ -35,9 +38,16 @@ function get<T>(url: string): Promise<T> {
 function post<T = unknown>(url: string, body: unknown): Promise<T> {
   return fetch(url, withCreds({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).then(j<T>);
 }
+function patch<T = unknown>(url: string, body: unknown): Promise<T> {
+  return fetch(url, withCreds({ method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).then(j<T>);
+}
 
 // ===== 認証 =====
-export const authMe = (): Promise<Me | null> => get<{ user: Me | null }>('/api/auth/me').then((r) => r.user).catch(() => null);
+export async function authMe(): Promise<Me | null> {
+  const r = await fetch('/api/auth/me', withCreds());
+  if (r.status === 401) return null;
+  return j<{ user: Me | null }>(r).then((res) => res.user);
+}
 export const authSetupInfo = () => get<{ needsSetup: boolean }>('/api/auth/setup');
 export const authSetup = (email: string, password: string, displayName: string) =>
   post<{ user: Me }>('/api/auth/setup', { email, password, displayName });
@@ -48,22 +58,22 @@ export const createUser = (body: { email: string; password: string; displayName:
 export const updateUser = (
   id: number,
   body: { displayName?: string; role?: string; active?: boolean; email?: string; password?: string },
-) => post<AppUser>(`/api/auth/users/${id}`, body);
+) => patch<AppUser>(`/api/auth/users/${encodeURIComponent(id)}`, body);
 
 // ===== 業務 =====
 export const getMeta = () => get<Meta>('/api/meta');
 export const getParts = () => get<Part[]>('/api/parts');
-export const setOwner = (id: string, owner: string) => post(`/api/parts/${id}/owner`, { owner });
-export const setTrouble = (id: string, flagged: boolean) => post(`/api/parts/${id}/trouble`, { flagged });
-export const setShelved = (id: string, flagged: boolean) => post(`/api/parts/${id}/shelved`, { flagged });
-export const setMemo = (id: string, memo: string) => post(`/api/parts/${id}/memo`, { memo });
-export const setNote = (id: string, note: string) => post(`/api/parts/${id}/note`, { note });
+export const setOwner = (id: string, owner: string) => post(`/api/parts/${encodeURIComponent(id)}/owner`, { owner });
+export const setTrouble = (id: string, flagged: boolean) => post(`/api/parts/${encodeURIComponent(id)}/trouble`, { flagged });
+export const setShelved = (id: string, flagged: boolean) => post(`/api/parts/${encodeURIComponent(id)}/shelved`, { flagged });
+export const setMemo = (id: string, memo: string) => post(`/api/parts/${encodeURIComponent(id)}/memo`, { memo });
+export const setNote = (id: string, note: string) => post(`/api/parts/${encodeURIComponent(id)}/note`, { note });
 
 export const getMasters = () => get<MasterDef[]>('/api/masters');
-export const getMasterRows = (name: string) => get<Record<string, unknown>[]>(`/api/masters/${name}`);
-export const saveMasterRow = (name: string, row: Record<string, unknown>) => post(`/api/masters/${name}`, row);
+export const getMasterRows = (name: string) => get<Record<string, unknown>[]>(`/api/masters/${encodeURIComponent(name)}`);
+export const saveMasterRow = (name: string, row: Record<string, unknown>) => post(`/api/masters/${encodeURIComponent(name)}`, row);
 export const deleteMasterRow = (name: string, id: string) =>
-  fetch(`/api/masters/${name}/${encodeURIComponent(id)}`, withCreds({ method: 'DELETE' })).then(j);
+  fetch(`/api/masters/${encodeURIComponent(name)}/${encodeURIComponent(id)}`, withCreds({ method: 'DELETE' })).then(j);
 export const recompute = () => post<{ parts: number; timeline: number }>('/api/recompute', {});
 export const getAudit = () => get<AuditRow[]>('/api/audit');
 
@@ -124,7 +134,7 @@ export const autoAssign = () =>
 // 担当者マスタ（担当者×機種）
 export const getOwners = () => get<OwnersData>('/api/owners');
 export const toggleOwnerKishu = (ownerId: number, kishu: string, on: boolean) =>
-  post(`/api/owners/${ownerId}/kishu`, { kishu, on });
+  post(`/api/owners/${encodeURIComponent(ownerId)}/kishu`, { kishu, on });
 
 // 取込：状態取得（ポーリング用）と開始。開始は409/422でもボディを読むため生fetch
 export const getIngest = () => get<IngestInfo>('/api/ingest');

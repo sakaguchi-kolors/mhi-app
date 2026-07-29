@@ -5,7 +5,6 @@ node_modules/
 # build output
 backend/dist/
 frontend/dist/
-frontend/web/
 *.tsbuildinfo
 
 # env
@@ -20,6 +19,8 @@ npm-debug.log*
 
 # OS
 .DS_Store
+Thumbs.db
+Desktop.ini
 
-# Prisma
-backend/prisma/*.db
+# runtime data
+backend/data/

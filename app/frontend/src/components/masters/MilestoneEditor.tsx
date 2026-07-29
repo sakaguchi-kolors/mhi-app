@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
 import type { Part } from '../../types';
 import type { Row } from './shared';
-import { MATCH_TYPE_LABEL, matchMilestone, str } from './shared';
+import { MATCH_TYPE_LABEL, matchMilestone, str, isActive } from './shared';
 import { UpdatedMeta } from './RowHistory';
 
 type Props = {
   rows: Row[];
   parts: Part[];
-  onSave: (row: Row, isNew: boolean) => Promise<void>;
-  onDelete: (id: unknown) => Promise<void>;
+  onSave: (row: Row, isNew: boolean) => Promise<boolean>;
+  onDelete: (id: unknown) => Promise<boolean>;
 };
 
 const MATCH_TYPES = ['name_contains', 'shop_prefix', 'shop'] as const;
@@ -27,7 +27,7 @@ export function MilestoneEditor({ rows, parts, onSave, onDelete }: Props) {
     return drafts[id] ? { ...r, ...drafts[id] } : r;
   });
 
-  const activeRules = viewRows.filter((r) => r.active === true || r.active === 'true');
+  const activeRules = viewRows.filter((r) => isActive(r));
 
   const previewRules = useMemo(() => {
     const rules = [...activeRules];

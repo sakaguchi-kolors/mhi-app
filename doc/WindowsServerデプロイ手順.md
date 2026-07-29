@@ -2,6 +2,9 @@
 
 AWS 検証環境で実際に構築した手順をもとに、**先方 Windows Server への初回デプロイ**と**機能アップデート**の手順をまとめたものです。
 
+> **先方環境では GitHub / Git は使いません。**  
+> 開発側が作成した **納品 ZIP** を USB・社内ファイル共有・VPN 経由などで受け取り、サーバー上で展開して `deploy.ps1` を実行する運用です。
+
 ---
 
 ## 1. 構成
@@ -24,7 +27,7 @@ PostgreSQL 18 (DB: mop)
 | IIS | フロント配信 + API リバースプロキシ |
 | NestJS (Service) | REST API / 認証 / ETL |
 | PostgreSQL 18 | データ保存 |
-| GitHub | ソース管理 |
+| 納品 ZIP | ソース更新（GitHub 非利用） |
 
 認証は **アプリ内ログイン（JWT）**。AD 連携は不要。
 
@@ -38,7 +41,8 @@ PostgreSQL 18 (DB: mop)
 |------|------|
 | OS | Windows Server 2019 または 2022 |
 | RDP 接続 | VPN 経由か、接続先 IP / アカウント |
-| インターネット | `git clone` / `npm ci` / Chocolatey が使えるか |
+| インターネット | `npm ci` / Chocolatey が使えるか（**GitHub へのアクセスは不要**） |
+| ファイル受け渡し | 納品 ZIP をサーバーへコピーする方法（USB / 共有フォルダ / 社内転送） |
 | 管理者権限 | 初回セットアップ用 |
 | ポート | 80（HTTP）、443（HTTPS 推奨） |
 | CSV 配置先 | 共有フォルダパス（本番取込元） |
@@ -54,9 +58,32 @@ PostgreSQL 18 (DB: mop)
 
 ---
 
-## 3. 初回デプロイ（先方 Windows Server）
+## 3. 開発側：納品パッケージの作成
 
-### 3-1. サーバーへ RDP 接続
+先方へ渡す前に、開発 PC（Mac 等）で ZIP を作成します。
+
+```bash
+cd app/deploy
+./make-release.sh
+# → ../../dist-release/mhi-app-release-YYYYMMDD.zip
+```
+
+Windows 開発 PC の場合:
+
+```powershell
+cd app\deploy
+.\make-release.ps1
+# → dist-release\mhi-app-release-YYYYMMDD.zip
+```
+
+ZIP には `node_modules` / `dist` / `.env` は含まれません（サーバー側で `npm ci` と build します）。  
+ルートに `RELEASE.txt`（バージョン・ビルド日時）が入ります。
+
+---
+
+## 4. 初回デプロイ（先方 Windows Server）
+
+### 4-1. サーバーへ RDP 接続
 
 Mac から **Windows App**（旧 Microsoft Remote Desktop）で接続。
 
@@ -66,13 +93,13 @@ Mac から **Windows App**（旧 Microsoft Remote Desktop）で接続。
 | Username | 先方から指定されたアカウント |
 | Password | 先方から指定されたパスワード |
 
-### 3-2. 管理者 PowerShell を開く
+### 4-2. 管理者 PowerShell を開く
 
 1. スタート → `powershell` と入力
 2. **Windows PowerShell** を **右クリック** → **管理者として実行**
 3. タイトルに `管理者:` と表示されていることを確認
 
-### 3-3. 実行ポリシー設定（初回のみ）
+### 4-3. 実行ポリシー設定（初回のみ）
 
 ```powershell
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
@@ -80,33 +107,29 @@ Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 `Y` + Enter
 
-### 3-4. ソースコード取得
+### 4-4. ソースコード配置（納品 ZIP）
 
-**Git が使える場合（推奨）**
+1. 開発側から受け取った `mhi-app-release-*.zip` をサーバーへコピー（例: `C:\Temp\`）
+2. 展開して所定の場所へ配置:
 
 ```powershell
 mkdir C:\apps -Force
-cd C:\apps
-git clone https://github.com/sakaguchi-kolors/mhi-app.git
-cd mhi-app\app\deploy
+Expand-Archive -Path C:\Temp\mhi-app-release-20260729.zip -DestinationPath C:\Temp\release -Force
+
+# ZIP 内は staging-mhi-app\ または mhi-app\ 直下構造。RELEASE.txt があるルートを C:\apps\mhi-app に置く
+# 例: 展開結果が C:\Temp\release\staging-mhi-app\ の場合
+Move-Item C:\Temp\release\staging-mhi-app C:\apps\mhi-app -Force
+
+cd C:\apps\mhi-app\app\deploy
+Get-Content C:\apps\mhi-app\RELEASE.txt
 ```
 
-**Git が使えない場合（非推奨）**
+> **重要:** `backend\.env` は初回セットアップ時に自動生成されます。**上書き更新時は必ず退避**してください（§5-2 参照）。
 
-1. 開発 PC から GitHub の ZIP をダウンロード
-2. `C:\apps\mhi-app\` に展開
+### 4-5. 初回セットアップ実行
 
 ```powershell
 cd C:\apps\mhi-app\app\deploy
-```
-
-> **注意:** ZIP 展開だけだと `.git` がなく、後から `git pull` できません。  
-> `deploy.ps1` は `Skipping git pull (not a git repo)` と表示して**手元の古いソースを再ビルドするだけ**になります。  
-> 初回から `git clone` を推奨します。既に ZIP 配置済みの場合は [4-5. Git リポジトリがない場合](#4-5-git-リポジトリがない場合) を参照してください。
-
-### 3-5. 初回セットアップ実行
-
-```powershell
 .\setup-server.ps1
 ```
 
@@ -115,8 +138,7 @@ cd C:\apps\mhi-app\app\deploy
 | 処理 | 内容 |
 |------|------|
 | Chocolatey | パッケージ管理 |
-| Node.js 20 LTS | API 実行環境 |
-| Git | ソース更新用 |
+| Node.js 20 | API 実行環境（choco `nodejs` 20.x pin） |
 | PostgreSQL 18 | DB |
 | NSSM | Windows Service 管理 |
 | IIS + URL Rewrite + ARR | Web サーバー |
@@ -125,6 +147,8 @@ cd C:\apps\mhi-app\app\deploy
 | Windows Service | `MhiProgressApi` 登録 |
 | IIS サイト | `MhiApp`（port 80） |
 | 初回デプロイ | build + migrate + seed + etl |
+
+Git は**インストールしません**（先方運用では不要）。
 
 #### オプション
 
@@ -136,7 +160,7 @@ cd C:\apps\mhi-app\app\deploy
 .\setup-server.ps1 -SkipPostgresInstall
 ```
 
-### 3-6. IIS 初期画面が出る場合（よくある）
+### 4-6. IIS 初期画面が出る場合（よくある）
 
 デプロイ成功後も IIS の「Welcome」画面が出ることがあります。
 
@@ -146,7 +170,7 @@ Stop-Website -Name "Default Web Site"
 Start-Website -Name "MhiApp"
 ```
 
-### 3-7. 本番用 `.env` 調整
+### 4-7. 本番用 `.env` 調整
 
 `C:\apps\mhi-app\app\backend\.env` を編集します。
 
@@ -156,7 +180,7 @@ Start-Website -Name "MhiApp"
 | `CSV_DIR` | 本番 CSV 共有フォルダ（例: `D:\share\csv`） |
 | `JWT_SECRET` | setup 時に自動生成済み（変更不要推奨） |
 | `COOKIE_SECURE` | HTTPS 化後は `true` |
-| `AS_OF` | 本番は ETL 実行日に合わせる |
+| `AS_OF` | **本番では行を削除（未設定＝実行日）**。サンプル検証時のみ固定値 |
 
 編集後:
 
@@ -164,7 +188,7 @@ Start-Website -Name "MhiApp"
 Restart-Service MhiProgressApi
 ```
 
-### 3-8. 動作確認
+### 4-8. 動作確認
 
 1. ブラウザで `http://<サーバーIP>/` にアクセス
 2. 初回: `/setup` で管理者アカウント作成
@@ -178,64 +202,71 @@ Invoke-RestMethod http://127.0.0.1:8787/api/auth/setup
 
 ---
 
-## 4. 機能アップデート（2 回目以降）
+## 5. 機能アップデート（2 回目以降）
 
-### 4-1. 全体フロー
+### 5-1. 全体フロー
 
 ```text
-Mac で開発・ローカル確認
+開発 PC で機能開発・ローカル確認
         │
         ▼
-GitHub に push（main ブランチ）
+make-release.sh / make-release.ps1 で納品 ZIP 作成
+        │
+        ▼
+USB / 共有フォルダ等で先方サーバーへ受け渡し
         │
         ▼
 先方 Windows Server に RDP 接続
         │
         ▼
-.\deploy.ps1 を実行
+.env を退避 → ソース上書き → .\deploy.ps1
         │
         ▼
-ブラウザで動作確認
+ブラウザで動作確認（RELEASE.txt / 画面）
 ```
 
-### 4-2. アップデート手順（サーバー側）
+### 5-2. アップデート手順（サーバー側）
 
 管理者 PowerShell で:
 
 ```powershell
+# 1) 設定ファイルを退避（必須）
+Copy-Item C:\apps\mhi-app\app\backend\.env C:\apps\backend.env.backup -Force
+
+# 2) 新しい ZIP を展開（例）
+Expand-Archive -Path C:\Temp\mhi-app-release-20260729.zip -DestinationPath C:\Temp\release-new -Force
+
+# 3) ソースを上書き（data\csv, logs は残す）
+robocopy C:\Temp\release-new\staging-mhi-app C:\apps\mhi-app /MIR /XD data logs /NFL /NDL
+
+# 4) .env を復元
+Copy-Item C:\apps\backend.env.backup C:\apps\mhi-app\app\backend\.env -Force
+
+# 5) デプロイ実行
 cd C:\apps\mhi-app\app\deploy
 .\deploy.ps1
+Get-Content C:\apps\mhi-app\RELEASE.txt
 ```
 
 `deploy.ps1` が行うこと:
 
 ```text
-git pull（.git がある場合のみ。なければスキップ）
+（既定）git pull なし — ディスク上のソースをそのままビルド
+  → backend/frontend: npm ci → build（Service 稼働中）
   → Windows Service 停止（Prisma DLL ロック解除）
-  → backend:  npm ci → build → prisma migrate deploy
-  → frontend: npm ci → build
+  → prisma migrate deploy
   → C:\inetpub\mhi へフロント配置
   → Windows Service 再起動
   → API ヘルスチェック
 ```
 
-**5〜10 分** 程度。ダウンタイムは Service 再起動の **数秒** です。
+**5〜10 分** 程度（ビルド時間含む）。API ダウンタイムは Service 停止〜再起動の **数秒** です。
 
 > **`Deploy complete` だけでは反映確認にならない**  
-> コンソールに `Skipping git pull (not a git repo)` が出ていた場合、ソースは更新されていません。  
-> [4-6. 反映確認](#4-6-反映確認) を必ず実施してください。
+> ソースを上書きせず `deploy.ps1` だけ実行すると、古いコードの再ビルドになります。  
+> 必ず §5-2 の手順 2〜4 でソース更新後に deploy し、[5-4. 反映確認](#5-4-反映確認) を実施してください。
 
-#### Git を使わない場合（ソースを手動で上書きしたとき）
-
-1. 新しいソースを `C:\apps\mhi-app\` に上書きコピー（`backend\.env` は消さない）
-2. 実行:
-
-```powershell
-cd C:\apps\mhi-app\app\deploy
-.\deploy.ps1 -SkipGitPull
-```
-
-### 4-3. DB マイグレーションについて
+### 5-3. DB マイグレーションについて
 
 `deploy.ps1` 内で `prisma migrate deploy` が自動実行されます。
 
@@ -243,7 +274,21 @@ cd C:\apps\mhi-app\app\deploy
 - 既存データは原則保持
 - マイグレーション失敗時は `api.err.log` を確認
 
-### 4-4. CSV データの更新
+### 5-4. 反映確認
+
+デプロイ後、サーバー側で次を確認:
+
+```powershell
+# 納品バージョン
+Get-Content C:\apps\mhi-app\RELEASE.txt
+
+# 配信 JS が新ビルドか（ファイル名ハッシュが deploy 前後で変わる）
+dir C:\inetpub\mhi\assets\index-*.js
+```
+
+ブラウザでは、サイドバー・機能が期待どおりか確認してください。
+
+### 5-5. CSV データの更新
 
 #### 手動（検証・初回）
 
@@ -278,104 +323,22 @@ cd C:\apps\mhi-app\app\backend
 npm run recompute
 ```
 
-### 4-5. Git リポジトリがない場合
-
-初回を ZIP 展開したなどで `C:\apps\mhi-app` に `.git` がないと、`git pull` は使えません。  
-**既存フォルダを Git 化して最新 `main` を取得する**方法（`.env` を保持）:
-
-```powershell
-cd C:\apps
-Stop-Service MhiProgressApi -Force
-Stop-Website -Name MhiApp -ErrorAction SilentlyContinue
-
-Copy-Item C:\apps\mhi-app\app\backend\.env C:\apps\backend.env.backup -Force
-
-cd C:\apps\mhi-app
-git init
-git remote add origin https://github.com/sakaguchi-kolors/mhi-app.git
-git fetch origin
-git checkout -f -B main origin/main
-
-Copy-Item C:\apps\backend.env.backup C:\apps\mhi-app\app\backend\.env -Force
-
-cd app\deploy
-.\deploy.ps1
-
-Start-Website -Name MhiApp
-```
-
-`git remote add origin` で「already exists」と出た場合:
-
-```powershell
-git remote set-url origin https://github.com/sakaguchi-kolors/mhi-app.git
-git fetch origin
-git checkout -f -B main origin/main
-```
-
-**別フォルダへ clone し直す場合**（`Rename-Item` で「in use」が出るときはこちら）:
-
-1. `C:\apps\mhi-app` 内で開いている PowerShell をすべて閉じる
-2. Service / IIS サイトを停止してから実行:
-
-```powershell
-cd C:\apps
-Stop-Service MhiProgressApi -Force
-Stop-Website -Name MhiApp -ErrorAction SilentlyContinue
-
-Copy-Item C:\apps\mhi-app\app\backend\.env C:\apps\backend.env.backup -Force
-
-git clone https://github.com/sakaguchi-kolors/mhi-app.git mhi-app-new
-Copy-Item C:\apps\backend.env.backup C:\apps\mhi-app-new\app\backend\.env -Force
-
-Rename-Item C:\apps\mhi-app C:\apps\mhi-app.old
-Rename-Item C:\apps\mhi-app-new C:\apps\mhi-app
-
-cd mhi-app\app\deploy
-.\deploy.ps1
-Start-Website -Name MhiApp
-```
-
-### 4-6. 反映確認
-
-デプロイ後、**ブラウザのキャッシュ清除だけでは不十分**なことがあります。サーバー側で次を確認:
-
-```powershell
-# ソースが最新か
-cd C:\apps\mhi-app
-git log -1 --oneline
-
-# 配信 JS が新ビルドか（ファイル名ハッシュが deploy 前後で変わる）
-dir C:\inetpub\mhi\assets\index-*.js
-Select-String -Path C:\inetpub\mhi\assets\index-*.js -Pattern "保留だけ表示"
-```
-
-ブラウザでは、サイドバー・機能が期待どおりか確認（例: 旧 UI の「ユーザー管理」が消えている、保留フィルタが「保留だけ表示」になっている等）。
-
 ---
 
-## 5. 開発側の日常フロー（参考）
+## 6. 開発側の日常フロー（参考）
 
 ```text
-1. Mac で機能開発
+1. 開発 PC で機能開発
 2. ローカル確認（docker compose + npm run dev）
-3. git commit → git push（GitHub main）
-4. 検証環境（AWS）で .\deploy.ps1 → 確認
-5. 問題なければ先方サーバーでも .\deploy.ps1
+3. （社内）Git でバージョン管理 — 先方サーバーには Git 不要
+4. make-release.sh で納品 ZIP 作成
+5. 検証環境（AWS）へ ZIP 配置 → deploy.ps1 → 確認
+6. 問題なければ同じ ZIP を先方サーバーへ受け渡し → deploy.ps1
 ```
-
-### ブランチ運用（推奨）
-
-| ブランチ | 用途 |
-|---------|------|
-| `main` | 本番・先方サーバーにデプロイ |
-| `develop` | 開発中（任意） |
-| `feature/*` | 機能開発 |
-
-先方サーバーでは **`main` のみ** `deploy.ps1` する運用がシンプルです。
 
 ---
 
-## 6. HTTPS 化（本番推奨）
+## 7. HTTPS 化（本番推奨）
 
 1. 先方のドメイン / 証明書を IIS に設定
 2. `backend\.env` で `COOKIE_SECURE=true`
@@ -383,16 +346,18 @@ Select-String -Path C:\inetpub\mhi\assets\index-*.js -Pattern "保留だけ表�
 
 ---
 
-## 7. ディレクトリ構成
+## 8. ディレクトリ構成
 
 ```text
 C:\apps\mhi-app\
+  RELEASE.txt           納品バージョン情報
   app\
     backend\              NestJS + .env + Prisma
     frontend\             React ソース
     deploy\
       setup-server.ps1    初回セットアップ
       deploy.ps1          アップデート
+      make-release.ps1    納品 ZIP 作成（開発 PC 用）
       web.config          IIS 設定
     sample-data\          サンプル CSV
   data\csv\               取込 CSV（検証用。本番は CSV_DIR で指定）
@@ -405,14 +370,12 @@ C:\inetpub\mhi\           IIS 配信（frontend/dist + web.config）
 
 ---
 
-## 8. トラブルシュート
+## 9. トラブルシュート
 
 | 症状 | 対処 |
 |------|------|
-| deploy 成功したが画面が古い | `git log -1` / `Skipping git pull` の有無を確認 → [4-5](#4-5-git-リポジトリがない場合) |
-| `fatal: not a git repository` | `.git` がない → [4-5](#4-5-git-リポジトリがない場合) で Git 化または clone し直し |
-| `Rename-Item ... because it is in use` | `mhi-app` 内の PowerShell を閉じ、Service / IIS 停止後に再実行 → [4-5](#4-5-git-リポジトリがない場合) |
-| `npm EPERM ... query_engine-windows.dll.node` | `Stop-Service MhiProgressApi -Force` してから `deploy.ps1`（スクリプト内でも停止するが、手動停止で確実に） |
+| deploy 成功したが画面が古い | ソース上書き（§5-2）を実施したか確認。`RELEASE.txt` の日付・`index-*.js` のハッシュを確認 |
+| `npm EPERM ... query_engine-windows.dll.node` | `Stop-Service MhiProgressApi -Force` してから `deploy.ps1` |
 | `Restart-Service : Failed to start` | `logs\api.err.log` を確認。backend の `npm ci` / `build` 失敗時に起きやすい |
 | IIS 初期画面（Welcome） | `Stop-Website "Default Web Site"` → `Start-Website "MhiApp"` |
 | 502 / API 不通 | `Get-Service MhiProgressApi` / `logs\api.err.log` |
@@ -420,8 +383,9 @@ C:\inetpub\mhi\           IIS 配信（frontend/dist + web.config）
 | DB 接続エラー | `backend\.env` の `DATABASE_URL` / PostgreSQL サービス状態 |
 | `/api` 404 | URL Rewrite + ARR が入っているか |
 | deploy 失敗 | PowerShell を**管理者**で開き直す |
-| npm / git ない | PowerShell を**閉じて開き直す**（PATH 反映） |
+| npm ない | PowerShell を**閉じて開き直す**（PATH 反映） |
 | Basic 認証エラー | `setup-server.ps1 -SkipBasicAuth` で再実行、または手動設定 |
+| `.env` が消えた | 更新前に必ず `C:\apps\backend.env.backup` へ退避 |
 
 ### ログ確認
 
@@ -433,7 +397,7 @@ Get-Website
 
 ---
 
-## 9. AWS 検証環境との違い
+## 10. AWS 検証環境との違い
 
 | 項目 | AWS 検証 | 先方本番 |
 |------|---------|---------|
@@ -443,20 +407,20 @@ Get-Website
 | CSV | `C:\apps\mhi-app\data\csv` | 共有フォルダ |
 | HTTPS | 後から設定 | 先方証明書を使用 |
 | ETL | 手動 | タスクスケジューラ |
+| ソース更新 | 納品 ZIP（または社内 Git + `-GitPull`） | **納品 ZIP のみ** |
 
 **デプロイコマンド（`setup-server.ps1` / `deploy.ps1`）は同一** です。
 
 ---
 
-## 10. クイックリファレンス
+## 11. クイックリファレンス
 
 ### 初回
 
 ```powershell
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-cd C:\apps
-git clone https://github.com/sakaguchi-kolors/mhi-app.git
-cd mhi-app\app\deploy
+# 納品 ZIP を C:\apps\mhi-app\ に展開
+cd C:\apps\mhi-app\app\deploy
 .\setup-server.ps1
 Import-Module WebAdministration; Stop-Website "Default Web Site"; Start-Website "MhiApp"
 ```
@@ -464,12 +428,19 @@ Import-Module WebAdministration; Stop-Website "Default Web Site"; Start-Website 
 ### アップデート
 
 ```powershell
+Copy-Item C:\apps\mhi-app\app\backend\.env C:\apps\backend.env.backup -Force
+# 新 ZIP を展開して C:\apps\mhi-app\ を上書き（§5-2）
+Copy-Item C:\apps\backend.env.backup C:\apps\mhi-app\app\backend\.env -Force
 cd C:\apps\mhi-app\app\deploy
 .\deploy.ps1
-git log -1 --oneline   # 反映確認（任意）
+Get-Content C:\apps\mhi-app\RELEASE.txt
 ```
 
-`.git` がない場合は §4-5 を参照。
+### 開発側：納品 ZIP 作成
+
+```bash
+cd app/deploy && ./make-release.sh
+```
 
 ### CSV 更新
 
@@ -483,3 +454,16 @@ npm run etl
 ```powershell
 Restart-Service MhiProgressApi
 ```
+
+---
+
+## 付録：社内検証で Git を使う場合（先方本番では不要）
+
+AWS 検証など、社内で Git リポジトリを clone している環境では、ソース更新を `git pull` で行えます。
+
+```powershell
+cd C:\apps\mhi-app\app\deploy
+.\deploy.ps1 -GitPull
+```
+
+先方本番サーバーでは **`-GitPull` は使わず**、納品 ZIP による更新（§5）のみ行ってください。

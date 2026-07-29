@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Req, Res } from '@nestjs/common';
+import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { IngestService, type IngestInfo, type StartResult } from './ingest.service';
 import { appUser } from '../common/app-user';
@@ -6,6 +7,8 @@ import { Roles } from '../auth/auth.decorators';
 
 @Roles('管理者')
 @Controller('ingest')
+@ApiTags('ingest')
+@ApiCookieAuth('mhi_token')
 export class IngestController {
   constructor(private readonly ingest: IngestService) {}
 

@@ -1,7 +1,17 @@
 // 算出ロジックの自己検証（DB不要 / Nodeのみで実行可）。
 // モック v13 の部品 X000677148(FITTING) を工程から再現し、期待値と照合する。
-import { computePart, bufferColor, isMilestone, gaicStatus, type PartMeta } from '../calc/calc';
-import type { RoutingRow } from '../common/types';
+import {
+  computePart,
+  bufferColor,
+  isMilestone,
+  gaicStatus,
+  dayDiff,
+  diffDays,
+  mmdd,
+  ymd,
+  type PartMeta,
+} from '../calc/calc';
+import type { RoutingRow } from '../etl/etl-routing.types';
 
 let failures = 0;
 function eq(label: string, got: unknown, want: unknown): void {
@@ -23,6 +33,30 @@ eq('gaic 戻り済=blue', gaicStatus(true, 'x', true, false), 'blue');
 eq('gaic 未払出=red', gaicStatus(false, '3_未払出', true, true), 'red');
 eq('gaic 回答待ち=yellow', gaicStatus(false, '4_材料払出済', true, false), 'yellow');
 eq('gaic 順調=blue', gaicStatus(false, '4_材料払出済', true, true), 'blue');
+// --- 単体：日付ユーティリティ ---
+const d0 = (s: string) => new Date(s + 'T00:00:00');
+eq('diffDays 同じ日', diffDays(d0('2026-07-08'), d0('2026-07-08')), 0);
+eq('diffDays +2日', diffDays(d0('2026-07-10'), d0('2026-07-08')), 2);
+eq('mmdd 7/8', mmdd(d0('2026-07-08')), '07/08');
+eq('mmdd null', mmdd(null), undefined);
+eq('ymd 2026/07/08', ymd(d0('2026-07-08')), '2026/07/08');
+eq('ymd null', ymd(null), '');
+// --- 単体：稼働日計算（休日除外） ---
+const holidays = new Set(['2026-07-09']);
+eq('dayDiff 休日1日', dayDiff(d0('2026-07-10'), d0('2026-07-08'), holidays), 1);
+eq('dayDiff 休日なし', dayDiff(d0('2026-07-10'), d0('2026-07-08')), 2);
+// --- 単体：マイルストン判定（マスタルール） ---
+const rules = [
+  { matchType: 'shop' as const, pattern: '7P31' },
+  { matchType: 'name_contains' as const, pattern: '検査' },
+];
+eq('milestone rule shop', isMilestone('7P31', '任意', rules), true);
+eq('milestone rule name', isMilestone('8A99', '最終検査', rules), true);
+eq('milestone rule miss', isMilestone('8A21', '旋削', rules), false);
+// --- 単体：色境界（カスタム閾値） ---
+eq('color custom green=2', bufferColor(2, 2, 1), 'green');
+eq('color custom yellow=1', bufferColor(1, 2, 1), 'yellow');
+eq('color custom red=0', bufferColor(0, 2, 1), 'red');
 
 // --- 結合：1部品分の算出 ---
 const asOf = new Date('2026-07-08T00:00:00');

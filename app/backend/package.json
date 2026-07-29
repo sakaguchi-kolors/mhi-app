@@ -18,20 +18,24 @@
     "seed": "ts-node -r tsconfig-paths/register src/scripts/seed.ts",
     "etl": "ts-node -r tsconfig-paths/register src/scripts/etl.cli.ts",
     "recompute": "ts-node -r tsconfig-paths/register src/scripts/etl.cli.ts --recompute",
-    "selftest": "ts-node src/scripts/selftest.ts"
+    "selftest": "ts-node src/scripts/selftest.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "prisma": {
     "seed": "ts-node -r tsconfig-paths/register src/scripts/seed.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.4",
-    "@nestjs/config": "^3.2.3",
     "@nestjs/core": "^10.4.4",
     "@nestjs/jwt": "^10.2.0",
     "@nestjs/platform-express": "^10.4.4",
-    "@nestjs/serve-static": "^4.0.2",
+    "@nestjs/swagger": "^7.4.2",
+    "@nestjs/throttler": "^6.2.1",
     "@prisma/client": "^5.20.0",
     "bcryptjs": "^2.4.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
     "cookie-parser": "^1.4.7",
     "csv-parse": "^5.5.6",
     "iconv-lite": "^0.6.3",
@@ -48,6 +52,7 @@
     "prisma": "^5.20.0",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.10"
   }
 }

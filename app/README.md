@@ -18,6 +18,7 @@
 | [デプロイ手順（AWS 検証）](../doc/開発検証デプロイ手順.md) | 検証環境へのデプロイ |
 | [デプロイ手順（先方 Windows Server）](../doc/WindowsServerデプロイ手順.md) | 本番デプロイ・アップデート |
 | [リポジトリ README](../README.md) | ドキュメント一覧 |
+| [開発者オンボーディング](ONBOARDING.md) | アーキテクチャ・用語集・変更原則 |
 
 ---
 
@@ -98,7 +99,8 @@ npm run dev                        # Vite HMR (:5173, /api→:8787)
 |---|---|---|
 | GET | `/api/meta` | 基準日・担当者候補・DUE_SOURCE |
 | GET | `/api/parts` | 一覧＋各部品のタイムライン（`Part[]`） |
-| POST | `/api/parts/:id/owner` \| `/trouble` \| `/memo` \| `/note` | アプリ固有データ更新 |
+| POST | `/api/parts/:id/owner` \| `/trouble` \| `/memo` \| `/note` \| `/shelved` | アプリ固有データ更新 |
+| GET/POST | `/api/auth/users`、POST `/api/auth/users/:id` | ユーザー管理（管理者） |
 | GET | `/api/masters`、GET/POST `/api/masters/:name`、DELETE `/api/masters/:name/:id` | マスタCRUD |
 | POST | `/api/recompute` | 再計算（DB上の取込済みデータから算出のみ） |
 | GET | `/api/owners`、POST `/api/owners/:id/kishu` | 担当者×機種 |

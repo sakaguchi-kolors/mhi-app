@@ -1,15 +1,15 @@
 import { useMemo, useState } from 'react';
 import type { Part } from '../../types';
 import type { Row } from './shared';
-import { num, partUsesShop, str } from './shared';
+import { num, partUsesShop, str, isActive } from './shared';
 import { UpdatedMeta } from './RowHistory';
 
 type Props = {
   rows: Row[];
   parts: Part[];
   defaultLt: number;
-  onSave: (row: Row, isNew: boolean) => Promise<void>;
-  onDelete: (shop: unknown) => Promise<void>;
+  onSave: (row: Row, isNew: boolean) => Promise<boolean>;
+  onDelete: (shop: unknown) => Promise<boolean>;
 };
 
 export function ShopLtEditor({ rows, parts, defaultLt, onSave, onDelete }: Props) {
@@ -38,7 +38,7 @@ export function ShopLtEditor({ rows, parts, defaultLt, onSave, onDelete }: Props
 
   const shopImpact = useMemo(() => {
     return previewRows
-      .filter((r) => r.active === true || r.active === 'true')
+      .filter((r) => isActive(r))
       .map((r) => {
         const shop = str(r.shop);
         const lt = num(r.lt_days, defaultLt);

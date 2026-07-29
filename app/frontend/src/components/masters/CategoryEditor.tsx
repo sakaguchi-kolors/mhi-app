@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react';
 import type { Part } from '../../types';
 import type { Row } from './shared';
-import { classifyPart, num, str } from './shared';
+import { classifyPart, num, str, isActive } from './shared';
+import { MasterEditorShell } from './MasterEditorShell';
+import { MasterRowActions } from './MasterRowActions';
 import { UpdatedMeta } from './RowHistory';
+import { useMasterDrafts } from './useMasterDrafts';
 
 type Props = {
   rows: Row[];
   parts: Part[];
-  onSave: (row: Row, isNew: boolean) => Promise<void>;
-  onDelete: (id: unknown) => Promise<void>;
+  onSave: (row: Row, isNew: boolean) => Promise<boolean>;
+  onDelete: (id: unknown) => Promise<boolean>;
 };
 
 function safeRe(pattern: string): RegExp | null {
@@ -20,23 +23,20 @@ function safeRe(pattern: string): RegExp | null {
 }
 
 export function CategoryEditor({ rows, parts, onSave, onDelete }: Props) {
-  const [drafts, setDrafts] = useState<Record<string, Row>>({});
   const [newRow, setNewRow] = useState<Row>({ pattern: '', category: '', priority: 100, active: true });
   const [testPartNo, setTestPartNo] = useState('');
+  const { viewRows, patchDraft, clearDraft } = useMasterDrafts(rows, (r) => str(r.id));
 
-  const viewRows = useMemo(() => {
-    const mapped = rows.map((r) => {
-      const id = str(r.id);
-      return drafts[id] ? { ...r, ...drafts[id] } : r;
-    });
-    return [...mapped].sort((a, b) => num(a.priority) - num(b.priority));
-  }, [rows, drafts]);
+  const sortedRows = useMemo(
+    () => [...viewRows].sort((a, b) => num(a.priority) - num(b.priority)),
+    [viewRows],
+  );
 
   const matched = useMemo(() => {
     const q = testPartNo.trim();
     if (!q) return null;
     for (const r of viewRows) {
-      if (!(r.active === true || r.active === 'true')) continue;
+      if (!isActive(r)) continue;
       const re = safeRe(str(r.pattern));
       if (re && re.test(q)) return { category: str(r.category), pattern: str(r.pattern), priority: num(r.priority) };
     }
@@ -60,12 +60,10 @@ export function CategoryEditor({ rows, parts, onSave, onDelete }: Props) {
   }, [parts, previewRows]);
 
   return (
-    <div className="master-forms">
-      <div className="master-card">
-        <h4>完成品分類</h4>
-        <p className="mnote">
-          部品番号に正規表現を当て、優先度が小さい順に最初の一致を分類にします。どれにも当たらなければ「その他」です。
-        </p>
+    <MasterEditorShell
+      title="完成品分類"
+      note="部品番号に正規表現を当て、優先度が小さい順に最初の一致を分類にします。どれにも当たらなければ「その他」です。"
+    >
         <p className="param-effect">変更すると：部品一覧の「完成品分類」列が変わります。</p>
         <div className="param-preview">
           <div className="param-preview-title">分類が変わる部品（編集中・追加行を含む試算）</div>
@@ -133,7 +131,7 @@ export function CategoryEditor({ rows, parts, onSave, onDelete }: Props) {
               </tr>
             </thead>
             <tbody>
-              {viewRows.map((row) => {
+              {sortedRows.map((row) => {
                 const id = str(row.id);
                 const reOk = !str(row.pattern) || !!safeRe(str(row.pattern));
                 return (
@@ -143,9 +141,7 @@ export function CategoryEditor({ rows, parts, onSave, onDelete }: Props) {
                         type="text"
                         value={str(row.pattern)}
                         className={reOk ? '' : 'input-error'}
-                        onChange={(e) =>
-                          setDrafts((p) => ({ ...p, [id]: { ...(p[id] ?? {}), pattern: e.target.value } }))
-                        }
+                        onChange={(e) => patchDraft(id, { pattern: e.target.value })}
                       />
                       {!reOk && <div className="param-warn">正規表現が不正です</div>}
                     </td>
@@ -153,56 +149,34 @@ export function CategoryEditor({ rows, parts, onSave, onDelete }: Props) {
                       <input
                         type="text"
                         value={str(row.category)}
-                        onChange={(e) =>
-                          setDrafts((p) => ({ ...p, [id]: { ...(p[id] ?? {}), category: e.target.value } }))
-                        }
+                        onChange={(e) => patchDraft(id, { category: e.target.value })}
                       />
                     </td>
                     <td style={{ width: 90 }}>
                       <input
                         type="number"
                         value={str(row.priority)}
-                        onChange={(e) =>
-                          setDrafts((p) => ({ ...p, [id]: { ...(p[id] ?? {}), priority: e.target.value } }))
-                        }
+                        onChange={(e) => patchDraft(id, { priority: e.target.value })}
                       />
                     </td>
                     <td>
                       <input
                         type="checkbox"
                         checked={row.active === true || row.active === 'true'}
-                        onChange={(e) =>
-                          setDrafts((p) => ({ ...p, [id]: { ...(p[id] ?? {}), active: e.target.checked } }))
-                        }
+                        onChange={(e) => patchDraft(id, { active: e.target.checked })}
                       />
                     </td>
                     <td>
                       <UpdatedMeta row={row} />
                     </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button
-                        type="button"
-                        className="mbtn save"
-                        onClick={async () => {
-                          await onSave({ id: row.id, ...row, ...(drafts[id] ?? {}) }, false);
-                          setDrafts((p) => {
-                            const n = { ...p };
-                            delete n[id];
-                            return n;
-                          });
-                        }}
-                      >
-                        保存
-                      </button>{' '}
-                      <button
-                        type="button"
-                        className="mbtn del"
-                        disabled={row.id == null || row.id === ''}
-                        onClick={() => onDelete(row.id)}
-                      >
-                        削除
-                      </button>
-                    </td>
+                    <MasterRowActions
+                      onSave={async () => {
+                        await onSave({ id: row.id, ...row }, false);
+                        clearDraft(id);
+                      }}
+                      onDelete={() => onDelete(row.id)}
+                      deleteDisabled={row.id == null || row.id === ''}
+                    />
                   </tr>
                 );
               })}
@@ -260,7 +234,6 @@ export function CategoryEditor({ rows, parts, onSave, onDelete }: Props) {
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
+    </MasterEditorShell>
   );
 }

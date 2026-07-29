@@ -1,20 +1,28 @@
-import { Body, Controller, Get, Param, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response, CookieOptions } from 'express';
-import { AuthService, type CreateUserInput, type PublicUser } from './auth.service';
+import { AuthService, type CreateUserInput } from './auth.service';
 import { Public, Roles } from './auth.decorators';
-import type { JwtUser } from './jwt-auth.guard';
+import type { PublicUser } from '../shared/types';
 
 const COOKIE = 'mhi_token';
 
 @Controller('auth')
+@ApiTags('auth')
+@ApiCookieAuth('mhi_token')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   private cookieOpts(): CookieOptions {
+    const secure =
+      process.env.COOKIE_SECURE === 'false'
+        ? false
+        : process.env.COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production';
     return {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.COOKIE_SECURE === 'true', // 本番HTTPS(IIS)ではtrue
+      secure,
       path: '/',
       maxAge: 12 * 3600 * 1000, // 12時間
     };
@@ -37,6 +45,8 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   async login(
     @Body() body: { email?: unknown; password?: unknown },
@@ -54,14 +64,14 @@ export class AuthController {
     return { ok: true };
   }
 
-  // 現在のログインユーザー（未ログインは user:null）。@Public だが JwtAuthGuard がトークンがあれば載せる。
+  // 現在のログインユーザー（未ログインは user:null）
   @Public()
   @Get('me')
-  me(@Req() req: Request & { user?: JwtUser }): { user: PublicUser | null } {
+  async me(@Req() req: Request & { user?: { sub: number } }): Promise<{ user: PublicUser | null }> {
     const u = req.user;
-    return {
-      user: u ? { userId: u.sub, email: u.email, displayName: u.name, role: u.role, active: true } : null,
-    };
+    if (!u) return { user: null };
+    const dbUser = await this.auth.getUserById(u.sub);
+    return { user: dbUser };
   }
 
   // ===== ユーザー管理（管理者のみ） =====
@@ -78,11 +88,11 @@ export class AuthController {
   }
 
   @Roles('管理者')
-  @Post('users/:id')
+  @Patch('users/:id')
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body() body: { active?: unknown; displayName?: unknown; role?: unknown; email?: unknown; password?: unknown },
   ): Promise<PublicUser> {
-    return this.auth.updateUser(Number(id), body);
+    return this.auth.updateUser(id, body);
   }
 }

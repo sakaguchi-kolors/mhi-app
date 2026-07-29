@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   useReactTable, getCoreRowModel, getSortedRowModel, getPaginationRowModel, flexRender,
   type ColumnDef, type SortingState, type PaginationState,
@@ -6,14 +6,12 @@ import {
 import type { Part } from '../types';
 import { sevRank, jc } from '../util';
 import { ProgressBar } from './ProgressBar';
+import { usePartsFilter } from '../hooks/usePartsFilter';
+import { PartsListKpi } from './parts/PartsListKpi';
+import { PartsListToolbar } from './parts/PartsListToolbar';
+import { MemoModal } from './shared/MemoModal';
 
 const PAGE_SIZES = [30, 50, 100, 500] as const;
-
-// 一意化＋ソート。選択中の値(sel)は他フィルタで消えても選べるよう必ず含める
-function facetOptions(arr: string[], sel: string): string[] {
-  const s = [...new Set(arr)].sort();
-  return sel !== 'all' && !s.includes(sel) ? [...s, sel] : s;
-}
 
 interface Props {
   parts: Part[];
@@ -29,65 +27,31 @@ interface Props {
   onMemo: (id: string, memo: string) => void;
 }
 
-type ChipFilter = 'all' | 'risk' | 'red' | 'yellow' | 'green' | 'stag';
-
 export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaultOwnerFilter, onAutoAssign, onOpen, onOwner, onTrouble, onShelved, onMemo }: Props) {
-  const [filter, setFilter] = useState<ChipFilter>('all');
-  const [cat, setCat] = useState('all');
-  const [owner, setOwner] = useState(defaultOwnerFilter ?? 'all');
-  // 機種スコープは担当ごとに固定的なので localStorage に保持
-  const [kishu, setKishu] = useState(() => localStorage.getItem('mop_kishu') ?? 'all');
-  const [showShelved, setShowShelved] = useState(false);
+  const {
+    filter,
+    cat,
+    owner,
+    kishu,
+    showShelved,
+    setCat,
+    setOwner,
+    setKishu,
+    setShowShelved,
+    toggleFilter,
+    setFilter,
+    filtered,
+    shelvedCount,
+    cats,
+    kishus,
+    ownerOpts,
+    kpi,
+  } = usePartsFilter(parts, stagnantThreshold, defaultOwnerFilter);
   const [sorting, setSorting] = useState<SortingState>([{ id: 'sev', desc: false }]);
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 30 });
   const [memoFor, setMemoFor] = useState<Part | null>(null);
 
-  useEffect(() => { localStorage.setItem('mop_kishu', kishu); }, [kishu]);
-
-  const shelvedCount = useMemo(() => parts.filter((p) => p.shelved).length, [parts]);
-
-  // KPIクリック：同じ条件をもう一度押すと解除
-  const toggleFilter = (next: ChipFilter) => setFilter((cur) => (cur === next ? 'all' : next));
-
-  // 各フィルタを適用（except で指定した1軸だけ無視）。連動フィルタの選択肢算出にも使う
-  // showShelved=false: 通常一覧（保留を除外） / true: 保留部品のみ
-  const match = useCallback((p: Part, except: 'cat' | 'kishu' | 'owner' | 'chip' | null) => {
-    if (p.shelved !== showShelved) return false;
-    if (except !== 'cat' && cat !== 'all' && p.category !== cat) return false;
-    if (except !== 'kishu' && kishu !== 'all' && p.kishu !== kishu) return false;
-    if (except !== 'owner' && owner !== 'all' && (p.owner ?? '未割当') !== owner) return false;
-    if (except !== 'chip') {
-      if (filter === 'risk' && p.color === 'green') return false;
-      if (filter === 'red' && p.color !== 'red') return false;
-      if (filter === 'yellow' && p.color !== 'yellow') return false;
-      if (filter === 'green' && p.color !== 'green') return false;
-      if (filter === 'stag' && p.stagnant < stagnantThreshold) return false;
-    }
-    return true;
-  }, [cat, kishu, owner, filter, showShelved, stagnantThreshold]);
-
-  const filtered = useMemo(() => parts.filter((p) => match(p, null)), [parts, match]);
-
-  // フィルタ変更時は先頭ページへ
   useEffect(() => { setPagination((p) => ({ ...p, pageIndex: 0 })); }, [filter, cat, owner, kishu, showShelved]);
-
-  // ドロップダウンの選択肢は「その軸以外のフィルタ適用後」の部品から動的生成（連動フィルタ）
-  const cats = useMemo(() => facetOptions(parts.filter((p) => match(p, 'cat')).map((p) => p.category), cat), [parts, match, cat]);
-  const kishus = useMemo(() => facetOptions(parts.filter((p) => match(p, 'kishu')).map((p) => p.kishu).filter(Boolean), kishu), [parts, match, kishu]);
-  const ownerOpts = useMemo(() => facetOptions(parts.filter((p) => match(p, 'owner')).map((p) => p.owner ?? '未割当'), owner), [parts, match, owner]);
-
-  // KPI件数は色/滞留フィルタを除外（カードの数字がクリック後も安定するように）
-  const kpi = useMemo(() => {
-    const f = parts.filter((p) => match(p, 'chip'));
-    const cnt = (pred: (p: Part) => boolean) => f.filter(pred).length;
-    const un = (p: Part) => (p.owner ?? '未割当') === '未割当';
-    return {
-      r: cnt((p) => p.color === 'red'), y: cnt((p) => p.color === 'yellow'),
-      g: cnt((p) => p.color === 'green'), s: cnt((p) => p.stagnant >= stagnantThreshold),
-      ru: cnt((p) => p.color === 'red' && un(p)), yu: cnt((p) => p.color === 'yellow' && un(p)),
-      su: cnt((p) => p.stagnant >= stagnantThreshold && un(p)),
-    };
-  }, [parts, match, stagnantThreshold]);
 
   const columns = useMemo<ColumnDef<Part>[]>(() => [
     {
@@ -229,58 +193,28 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
   const from = total === 0 ? 0 : pageIndex * pageSize + 1;
   const to = Math.min((pageIndex + 1) * pageSize, total);
 
-  const sub = (nn: number, tot: number) => (tot > 0 ? <div className="kpi-sub">未割当 <b>{nn}</b></div> : null);
 
   return (
     <section>
-      <div className="kpi-row">
-        <button type="button" className={`kpi red ${filter === 'red' ? 'active' : ''}`}
-          onClick={() => toggleFilter('red')} title="納期危険の部品だけ表示">
-          <div className="num">{kpi.r}</div><div className="lbl">🔴 納期危険（要対応）</div>{sub(kpi.ru, kpi.r)}
-        </button>
-        <button type="button" className={`kpi yellow ${filter === 'yellow' ? 'active' : ''}`}
-          onClick={() => toggleFilter('yellow')} title="ギリギリの部品だけ表示">
-          <div className="num">{kpi.y}</div><div className="lbl">🟡 ギリギリ（要注視）</div>{sub(kpi.yu, kpi.y)}
-        </button>
-        <button type="button" className={`kpi green ${filter === 'green' ? 'active' : ''}`}
-          onClick={() => toggleFilter('green')} title="余裕ありの部品だけ表示">
-          <div className="num">{kpi.g}</div><div className="lbl">🟢 余裕あり</div>
-        </button>
-        <button type="button" className={`kpi stag ${filter === 'stag' ? 'active' : ''}`}
-          onClick={() => toggleFilter('stag')} title={`滞留${stagnantThreshold}日以上の部品だけ表示`}>
-          <div className="num">{kpi.s}</div><div className="lbl">🚩 滞留{stagnantThreshold}日以上</div>{sub(kpi.su, kpi.s)}
-        </button>
-      </div>
-
-      <div className="toolbar">
-        <span className={`chip ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>すべて</span>
-        <span className={`chip ${filter === 'risk' ? 'active' : ''}`} onClick={() => setFilter('risk')}>要注意（赤・黄）</span>
-        <span className={`chip ${filter === 'stag' ? 'active' : ''}`} onClick={() => setFilter('stag')}>滞留🚩のみ</span>
-        <select className="filter" value={cat} onChange={(e) => setCat(e.target.value)}>
-          <option value="all">完成品分類：すべて</option>
-          {cats.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select className="filter" value={owner} onChange={(e) => setOwner(e.target.value)}>
-          <option value="all">担当者：すべて</option>
-          {ownerOpts.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-        <select className="filter" value={kishu} onChange={(e) => setKishu(e.target.value)}>
-          <option value="all">機種：すべて</option>
-          {kishus.map((k) => <option key={k} value={k}>{k}</option>)}
-        </select>
-        <span
-          className={`chip ${showShelved ? 'active' : ''}`}
-          onClick={() => setShowShelved((v) => !v)}
-          title="保留にした部品だけを表示">
-          保留だけ表示{shelvedCount > 0 ? `（${shelvedCount}）` : ''}
-        </span>
-        {admin && onAutoAssign && (
-          <button className="chip assign-btn" onClick={onAutoAssign}
-            title="未割当の部品を機種→担当チームに基づいて自動割り当て（既存の割当は変更しません）">
-            ⚙ 未割当を自動割り当て
-          </button>
-        )}
-      </div>
+      <PartsListKpi kpi={kpi} filter={filter} stagnantThreshold={stagnantThreshold} onToggle={toggleFilter} />
+      <PartsListToolbar
+        filter={filter}
+        cat={cat}
+        owner={owner}
+        kishu={kishu}
+        showShelved={showShelved}
+        shelvedCount={shelvedCount}
+        cats={cats}
+        ownerOpts={ownerOpts}
+        kishus={kishus}
+        admin={admin}
+        onSetFilter={setFilter}
+        onSetCat={setCat}
+        onSetOwner={setOwner}
+        onSetKishu={setKishu}
+        onToggleShelved={() => setShowShelved((v) => !v)}
+        onAutoAssign={onAutoAssign}
+      />
 
       <div className="panel">
         <div className="table-wrap">
@@ -344,21 +278,5 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
           onSave={(text) => { onMemo(memoFor.id, text); setMemoFor(null); }} />
       )}
     </section>
-  );
-}
-
-function MemoModal({ part, onClose, onSave }: { part: Part; onClose: () => void; onSave: (t: string) => void }) {
-  const [text, setText] = useState(part.memo ?? '');
-  return (
-    <div className="modal-bg" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>メモ</h3>
-        <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="困っている内容・経緯・依頼先などを記入…" />
-        <div className="modal-btns">
-          <button className="cancel" onClick={onClose}>キャンセル</button>
-          <button className="save" onClick={() => onSave(text)}>保存</button>
-        </div>
-      </div>
-    </div>
   );
 }

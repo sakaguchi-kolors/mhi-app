@@ -10,11 +10,16 @@ import { RolesGuard } from './roles.guard';
 @Module({
   imports: [
     JwtModule.registerAsync({
-      // .env の JWT_SECRET を実行時(初期化時)に読む（本番は必ず十分に長い値へ差し替え）
-      useFactory: () => ({
-        secret: process.env.JWT_SECRET || 'mhi-dev-secret-change-me',
-        signOptions: { expiresIn: '12h' },
-      }),
+      useFactory: () => {
+        const secret = process.env.JWT_SECRET;
+        if (!secret || secret.length < 32) {
+          throw new Error('JWT_SECRET を設定してください（32文字以上）');
+        }
+        return {
+          secret,
+          signOptions: { expiresIn: '12h' },
+        };
+      },
     }),
   ],
   controllers: [AuthController],

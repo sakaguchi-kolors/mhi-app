@@ -1,0 +1,11 @@
+
+  :root{
+    --bg:#f3f6fb; --panel:#fff; --line:#d7dfec; --text:#1f2a44; --muted:#66758f;
+    --nav:#16324f; --nav2:#254d77;
+    --red:#d64545; --red-bg:#fdecec; --red-soft:#f7b7b7;
+    --yellow:#e0a020; --yellow-bg:#fff6e2; --yellow-soft:#f4d78a;
+    --green:#1f9d68; --green-bg:#e8f8f0; --green-soft:#a5e0c3;
+    --info:#2d6cdf; --info-bg:#eaf1ff;
+    --done:#8fa4c4; --wait:#e2e8f2;
+    --shadow:0 10px 25px rgba(31,42,68,.08); --radius:16px;
+  }

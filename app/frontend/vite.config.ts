@@ -1,11 +1,15 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
-// フロント(React/TS)。ソースは frontend/、ビルド出力は frontend/dist（本番は IIS 配信）。
-// 開発時は Vite dev(:5173) から API(:8787) へ /api をプロキシ。API契約は /api/* で据え置き。
 export default defineConfig({
   base: '/',
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@shared': path.resolve(__dirname, '../backend/src/shared'),
+    },
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -15,5 +19,9 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:8787',
     },
+  },
+  test: {
+    include: ['src/**/*.test.ts'],
+    environment: 'node',
   },
 });

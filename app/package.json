@@ -12,6 +12,16 @@
     "dev:web": "cd frontend && npm run dev",
     "build": "cd backend && npm run build && cd ../frontend && npm run build",
     "typecheck": "cd backend && npm run typecheck && cd ../frontend && npm run typecheck",
-    "selftest": "cd backend && npm run selftest"
+    "selftest": "cd backend && npm run selftest",
+    "test": "cd backend && npm run test && cd ../frontend && npm run test",
+    "lint": "eslint backend/src frontend/src"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@typescript-eslint/eslint-plugin": "^8.65.0",
+    "@typescript-eslint/parser": "^8.65.0",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^16.0.0"
   }
 }

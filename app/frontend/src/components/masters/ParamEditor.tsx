@@ -7,7 +7,7 @@ import { UpdatedMeta } from './RowHistory';
 type Props = {
   rows: Row[];
   parts: Part[];
-  onSave: (row: Row) => Promise<void>;
+  onSave: (row: Row) => Promise<boolean>;
 };
 
 const COLOR_LABEL = { green: '緑', yellow: '黄', red: '赤' } as const;

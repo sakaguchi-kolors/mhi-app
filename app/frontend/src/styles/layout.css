@@ -1,0 +1,62 @@
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Segoe UI","Hiragino Sans","Yu Gothic UI",sans-serif;background:var(--bg);color:var(--text);}
+  .app{min-height:100vh;}
+  .app-shell{display:flex;min-height:100vh;}
+  .app-body{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .sidebar{
+    width:240px;flex-shrink:0;
+    background:linear-gradient(180deg,var(--nav),#10253d 70%);
+    color:#fff;padding:18px 14px;display:flex;flex-direction:column;gap:14px;
+    transition:width .22s ease,padding .22s ease;
+    position:sticky;top:0;height:100vh;overflow:hidden;
+  }
+  .sidebar.collapsed{width:68px;padding:18px 10px;}
+  .sidebar-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+  .sidebar-toggle{
+    flex-shrink:0;width:30px;height:30px;border-radius:8px;border:1px solid rgba(255,255,255,.15);
+    background:rgba(255,255,255,.08);color:#fff;cursor:pointer;font-size:14px;line-height:1;
+    display:flex;align-items:center;justify-content:center;font-family:inherit;
+  }
+  .sidebar-toggle:hover{background:rgba(255,255,255,.16);}
+  .brand h1{font-size:17px;margin:0 0 6px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .brand h1 span{opacity:.55;font-size:11px;font-weight:600;}
+  .brand p{margin:0;color:rgba(255,255,255,.65);font-size:11px;line-height:1.5;}
+  .brand p b{color:#fff;font-weight:700;}
+  .brand{padding:2px 4px 12px;border-bottom:1px solid rgba(255,255,255,.12);flex:1;min-width:0;}
+  .sidebar.collapsed .brand h1{font-size:13px;text-align:center;}
+  .nav-group{display:grid;gap:6px;flex:1;align-content:start;}
+  .nav-btn{
+    width:100%;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.1);
+    border-radius:11px;padding:11px 12px;text-align:left;cursor:pointer;transition:.2s;font-size:13px;
+    display:flex;align-items:center;gap:10px;font-family:inherit;white-space:nowrap;
+  }
+  .nav-btn:hover,.nav-btn.active{background:linear-gradient(180deg,#2d5f95,var(--nav2));transform:translateY(-1px);}
+  a.nav-btn{text-decoration:none;display:flex;}
+  .nav-icon{width:18px;text-align:center;flex-shrink:0;font-size:14px;line-height:1;position:relative;}
+  .nav-label{overflow:hidden;text-overflow:ellipsis;}
+  .sidebar.collapsed .nav-btn{justify-content:center;padding:11px 8px;}
+  .sidebar.collapsed .nav-label{display:none;}
+  .sidebar-foot{margin-top:auto;display:grid;gap:8px;padding-top:12px;border-top:1px solid rgba(255,255,255,.12);}
+  .sidebar-user{display:flex;align-items:center;gap:10px;padding:4px 6px;min-height:36px;}
+  .sidebar-user-icon{width:18px;text-align:center;color:rgba(255,255,255,.7);font-size:10px;}
+  .sidebar-user-text{display:flex;flex-direction:column;gap:2px;min-width:0;overflow:hidden;}
+  .sidebar-user-text strong{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sidebar-user-text span{font-size:10px;color:rgba(255,255,255,.6);}
+  .sidebar.collapsed .sidebar-user{justify-content:center;}
+  .sidebar.collapsed .sidebar-user-text{display:none;}
+  .logout-btn{opacity:.9;}
+  .legend{margin-top:auto;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:13px;padding:13px;}
+  .legend h3{font-size:12px;margin:0 0 10px;}
+  .legend-item{display:flex;align-items:flex-start;gap:9px;margin-bottom:9px;font-size:11px;color:rgba(255,255,255,.85);line-height:1.4;}
+  .dot{width:12px;height:12px;border-radius:50%;flex:0 0 12px;margin-top:2px;}
+  .main{padding:22px 26px;overflow:auto;flex:1;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:14px 26px 0;}
+  .page-title{margin:0;font-size:20px;font-weight:800;}
+  .page-title span{font-size:13px;font-weight:600;color:var(--muted);margin-left:8px;}
+  .legend2{background:#fff;border:1px solid var(--line);border-radius:12px;padding:9px 14px;margin-bottom:14px;font-size:12px;box-shadow:var(--shadow);}
+  .legend2 summary{cursor:pointer;font-weight:700;color:var(--text);}
+  .legend2-items{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:10px;color:var(--muted);align-items:center;}
+  .legend2-items .k{font-weight:800;}
+  .page-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;margin-bottom:16px;}
+  .page-head h2{margin:0 0 4px;font-size:22px;}
+  .page-head p{margin:0;color:var(--muted);font-size:13px;}

@@ -82,8 +82,7 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
         console.error(e);
         toast.show('マスタ定義の取得に失敗しました');
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [routeName, navigate, toast]);
 
   useEffect(() => {
     if (!defs.length || !routeName) return;
@@ -115,7 +114,6 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
       toast.show(errMsg(e, 'マスタの取得に失敗しました'));
     });
     if (cur !== 'param') ensureParamRows().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cur, defs]);
 
   const applyAfterChange = async (masterName: string, action: 'save' | 'delete') => {
@@ -141,10 +139,10 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
     toast.show(action === 'save' ? '保存しました' : '削除しました');
   };
 
-  const save = async (row: Row, isNew: boolean, masterName = cur) => {
+  const save = async (row: Row, isNew: boolean, masterName = cur): Promise<boolean> => {
     if (masterName === 'milestone' && !str(row.pattern).trim()) {
       toast.show('パターンを入力してください');
-      return;
+      return false;
     }
     try {
       await api.saveMasterRow(masterName, row);
@@ -155,28 +153,30 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
       }
       if (isNew && def && masterName === cur) setNewRow(emptyRow(def));
       await applyAfterChange(masterName, 'save');
+      return true;
     } catch (e) {
       console.error(e);
       toast.show(errMsg(e, '保存に失敗しました'));
-      throw e;
+      return false;
     }
   };
 
-  const del = async (pkVal: unknown, masterName = cur) => {
+  const del = async (pkVal: unknown, masterName = cur): Promise<boolean> => {
     if (pkVal == null || pkVal === '' || String(pkVal) === 'undefined') {
       toast.show('削除対象を特定できません。画面を再読み込みしてください。');
-      return;
+      return false;
     }
-    if (!confirm('削除しますか？')) return;
+    if (!confirm('削除しますか？')) return false;
     try {
       const id = masterName === 'calendar' ? str(pkVal).slice(0, 10) : String(pkVal);
       await api.deleteMasterRow(masterName, id);
       if (masterName === cur) await loadRows(cur);
       await applyAfterChange(masterName, 'delete');
+      return true;
     } catch (e) {
       console.error(e);
       toast.show(errMsg(e, '削除に失敗しました'));
-      throw e;
+      return false;
     }
   };
 
