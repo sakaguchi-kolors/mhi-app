@@ -1,6 +1,6 @@
 // API クライアント（契約は据え置き＝バックの /api/* をそのまま呼ぶ）。
 // 認証は httpOnly Cookie。全リクエストで credentials を送る。
-import type { Part, Meta, MasterDef, AuditRow, AuditSearchResult, IngestInfo, IngestJob, IngestFile, OwnersData } from './types';
+import type { Part, Meta, MasterDef, AuditRow, AuditSearchResult, IngestInfo, IngestJob, IngestFile, IngestUploadResult, OwnersData } from './types';
 
 // 認証ユーザー
 export interface Me {
@@ -142,4 +142,51 @@ export const runIngest = async (): Promise<{ status: number; started: boolean; r
   const r = await fetch('/api/ingest', withCreds({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }));
   const data = await r.json().catch(() => ({}));
   return { status: r.status, ...data };
+};
+
+export type IngestUploadKey = 'flexsche' | 'pbs' | 'octopus' | 'shopMaster';
+
+export const uploadIngestFile = (
+  key: IngestUploadKey,
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<IngestUploadResult> =>
+  new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/ingest/upload/${encodeURIComponent(key)}`);
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((100 * e.loaded) / e.total));
+    };
+    xhr.onload = () => {
+      let data: IngestUploadResult & { message?: unknown } = { saved: false, files: [], preflightOk: false };
+      try {
+        data = JSON.parse(xhr.responseText) as typeof data;
+      } catch {
+        /* ignore */
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+        return;
+      }
+      const msg = data.message;
+      reject(new Error(msg ? String(Array.isArray(msg) ? msg.join(', ') : msg) : `API ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error('ネットワークエラー'));
+    xhr.onabort = () => reject(new Error('アップロードが中断されました'));
+    const fd = new FormData();
+    fd.append('file', file);
+    xhr.send(fd);
+  });
+
+export const uploadIngestFiles = async (
+  files: Record<IngestUploadKey, File>,
+  keys: readonly IngestUploadKey[],
+  onProgress?: (key: IngestUploadKey, pct: number) => void,
+): Promise<IngestUploadResult> => {
+  let last: IngestUploadResult = { saved: false, files: [], preflightOk: false };
+  for (const key of keys) {
+    last = await uploadIngestFile(key, files[key], (pct) => onProgress?.(key, pct));
+  }
+  return last;
 };

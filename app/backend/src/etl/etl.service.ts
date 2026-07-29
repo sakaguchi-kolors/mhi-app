@@ -2,6 +2,7 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfigService } from '../config/app-config.service';
+import { AsOfService } from '../config/as-of.service';
 import { readCsv, readCsvStream, clean } from './csv';
 import { computePart, type PartMeta } from '../calc/calc';
 import { loadMasters } from '../masters/masters.util';
@@ -33,6 +34,7 @@ export class EtlService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: AppConfigService,
+    private readonly asOf: AsOfService,
     private readonly audit: AuditService,
     private readonly batchLock: BatchLockService,
   ) {}
@@ -53,10 +55,10 @@ export class EtlService {
     const dry = opts.dry ?? false;
     const auditUser = opts.user ?? 'etl';
     const { csvDir, files } = this.config;
-    const asOf = this.config.asOfDate;
+    const { ymd: asOfYmd, date: asOf } = this.asOf.forIngest();
     const M = await loadMasters(this.prisma);
     this.logger.log(`CSV_DIR = ${csvDir}`);
-    this.logger.log(`AS_OF = ${this.config.asOf} / DUE_SOURCE = ${M.params.dueSource} (master)`);
+    this.logger.log(`AS_OF = ${asOfYmd} / DUE_SOURCE = ${M.params.dueSource} (master)`);
 
     const master = readCsv(csvDir, files.shopMaster);
     const nameByShopJob = new Map<string, string>();
@@ -249,6 +251,8 @@ export class EtlService {
     }
 
     this.logger.log(`完了: t_part_status=${statusRows.length}件 / t_timeline=${timelineRows.length}件`);
+    await this.asOf.persist(asOfYmd, auditUser);
+    this.logger.log(`AS_OF persisted = ${asOfYmd}`);
     return { parts: statusRows.length, timeline: timelineRows.length };
   }
 
@@ -300,9 +304,10 @@ export class EtlService {
   }
 
   private async recomputeInner(): Promise<EtlSummary> {
-    const asOf = this.config.asOfDate;
+    const asOfYmd = await this.asOf.getEffective();
+    const asOf = await this.asOf.getEffectiveDate();
     const M = await loadMasters(this.prisma);
-    this.logger.log(`[recompute] AS_OF=${this.config.asOf} / DUE_SOURCE=${M.params.dueSource}`);
+    this.logger.log(`[recompute] AS_OF=${asOfYmd} / DUE_SOURCE=${M.params.dueSource}`);
 
     const nameByShopJob = new Map<string, string>();
     const nameByShop = new Map<string, string>();

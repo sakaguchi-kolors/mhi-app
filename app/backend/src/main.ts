@@ -37,7 +37,11 @@ async function bootstrap(): Promise<void> {
   }
 
   const config = app.get(AppConfigService);
-  await app.listen(config.apiPort);
-  console.log(`[api] http://localhost:${config.apiPort}  (asOf=${config.asOf})`);
+  const server = await app.listen(config.apiPort);
+  const uploadTimeout = config.ingestUploadTimeoutMs;
+  server.setTimeout(uploadTimeout);
+  server.requestTimeout = uploadTimeout;
+  server.headersTimeout = uploadTimeout + 60_000;
+  console.log(`[api] http://localhost:${config.apiPort}  (asOf=${config.asOf}, uploadMax=${config.ingestUploadMaxMb}MB)`);
 }
 void bootstrap();

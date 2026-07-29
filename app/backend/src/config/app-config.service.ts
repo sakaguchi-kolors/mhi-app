@@ -2,26 +2,25 @@
 // .env は load-env.ts が process.env に読み込む（main.ts / CLI 先頭）。
 import { Injectable } from '@nestjs/common';
 import path from 'node:path';
+import { isYmd, localYmd } from '../shared/dates';
 
 const env = (k: string, d: string): string => process.env[k] ?? d;
 const num = (k: string, d: number): number => Number(process.env[k] ?? d);
-
-function localYmd(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
 
 @Injectable()
 export class AppConfigService {
   /** 取込元CSVフォルダの絶対パス（実行時の cwd = app/backend 基準） */
   readonly csvDir = path.resolve(process.cwd(), env('CSV_DIR', '../sample-data'));
 
-  /** 基準日(as-of)。AS_OF 未設定時は呼び出し時点のローカル日付 */
+  /** env AS_OF（開発・テスト用。本番は AsOfService が DB 保存値を優先） */
+  get asOfEnv(): string | null {
+    const v = process.env.AS_OF?.trim();
+    return v && isYmd(v) ? v : null;
+  }
+
+  /** 起動ログ等用。DB 未参照のフォールバック */
   get asOf(): string {
-    return env('AS_OF', localYmd());
+    return this.asOfEnv ?? localYmd();
   }
 
   readonly shopLtDays = num('SHOP_LT_DAYS', 4);
@@ -32,6 +31,13 @@ export class AppConfigService {
 
   /** 取込ジョブ状態ファイル */
   readonly ingestJobFile = path.resolve(process.cwd(), env('INGEST_JOB_FILE', 'data/ingest-job.json'));
+
+  /** CSVアップロード1ファイルあたりの上限（MB）。OCTPuS は 1.8GB 規模になり得る */
+  readonly ingestUploadMaxMb = num('INGEST_UPLOAD_MAX_MB', 4096);
+  readonly ingestUploadMaxBytes = this.ingestUploadMaxMb * 1024 * 1024;
+
+  /** アップロード／取込 HTTP タイムアウト（ms）。大容量転送・ETL 用 */
+  readonly ingestUploadTimeoutMs = num('INGEST_UPLOAD_TIMEOUT_MS', 30 * 60 * 1000);
 
   /** 取込ファイル名。既定は提供データの名称。収集バッチで変わる場合は env で上書き可。 */
   readonly files = {

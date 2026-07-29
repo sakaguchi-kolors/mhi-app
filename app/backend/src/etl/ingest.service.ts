@@ -9,6 +9,7 @@ import { EtlService } from './etl.service';
 import { BatchLockService } from './batch-lock.service';
 import { readCsvHeader } from './csv';
 import { IngestJobStore } from './ingest-job.store';
+import { type IngestUploadKey } from './ingest-upload.constants';
 
 export interface IngestFileInfo {
   name: string;
@@ -40,12 +41,20 @@ export interface IngestInfo {
   files: IngestFileInfo[];
   preflightOk: boolean;
   job: IngestJob | null;
+  uploadMaxMb: number;
 }
 export interface StartResult {
   started: boolean;
   reason?: 'busy' | 'preflight';
   job?: IngestJob;
   files?: IngestFileInfo[];
+}
+export interface UploadResult {
+  saved: boolean;
+  key?: string;
+  missing?: string[];
+  files: IngestFileInfo[];
+  preflightOk: boolean;
 }
 
 @Injectable()
@@ -138,7 +147,53 @@ export class IngestService implements OnModuleInit {
 
   async ingestInfo(): Promise<IngestInfo> {
     const files = await this.inspectFiles();
-    return { dir: this.config.csvDir, files, preflightOk: this.preflightOk(files), job: this.currentJob ?? this.lastJob };
+    return {
+      dir: this.config.csvDir,
+      files,
+      preflightOk: this.preflightOk(files),
+      job: this.currentJob ?? this.lastJob,
+      uploadMaxMb: this.config.ingestUploadMaxMb,
+    };
+  }
+
+  private targetFileName(key: IngestUploadKey): string {
+    const f = this.config.files;
+    return { flexsche: f.flexsche, pbs: f.pbs, octopus: f.octopus, shopMaster: f.shopMaster }[key];
+  }
+
+  /** multer が csvDir に書いた一時ファイルを所定名へ原子的に確定 */
+  private commitUploadedFile(tmpPath: string, destPath: string): void {
+    try {
+      fs.renameSync(tmpPath, destPath);
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === 'EXDEV') {
+        fs.copyFileSync(tmpPath, destPath);
+        fs.unlinkSync(tmpPath);
+        return;
+      }
+      throw e;
+    }
+  }
+
+  /** 1 CSV を CSV_DIR に保存（大容量向けディスク直書き。取込は別途 startIngest） */
+  async saveUpload(key: IngestUploadKey, uploaded: Express.Multer.File, user: string): Promise<UploadResult> {
+    const dir = this.config.csvDir;
+    const dest = path.join(dir, this.targetFileName(key));
+    const tmpPath = uploaded.path;
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      this.commitUploadedFile(tmpPath, dest);
+      const files = await this.inspectFiles();
+      await this.audit.record(user, 'ingest.upload', 'batch', dir, key, {
+        file: this.targetFileName(key),
+        size: uploaded.size,
+      });
+      return { saved: true, key, files, preflightOk: this.preflightOk(files) };
+    } catch (e) {
+      if (tmpPath && fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+      throw e;
+    }
   }
 
   private async colorCounts(): Promise<{ red: number; yellow: number; green: number }> {

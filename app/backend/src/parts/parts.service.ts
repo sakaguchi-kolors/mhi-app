@@ -1,7 +1,7 @@
 // 部品一覧の組み立て（②算出結果 ＋ ③アプリ固有 ＋ 外注先名）と、アプリ固有データの更新。
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AppConfigService } from '../config/app-config.service';
+import { AsOfService } from '../config/as-of.service';
 import { AuditService } from '../audit/audit.service';
 import type { Part, TimelineCell, Color, CellStatus, GaicStatus } from '../common/types';
 import { mmdd, ymd, daysSince } from '../shared/dates';
@@ -14,7 +14,7 @@ export class PartsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: AppConfigService,
+    private readonly asOf: AsOfService,
     private readonly audit: AuditService,
   ) {}
 
@@ -25,7 +25,7 @@ export class PartsService {
       return this.partsCache.parts;
     }
 
-    const asOf = this.config.asOfDate;
+    const asOf = await this.asOf.getEffectiveDate();
     const [status, timeline, assign, trouble, shelved, note, vendor] = await Promise.all([
       this.prisma.partStatus.findMany(),
       this.prisma.timeline.findMany({ orderBy: [{ osId: 'asc' }, { seq: 'asc' }] }),

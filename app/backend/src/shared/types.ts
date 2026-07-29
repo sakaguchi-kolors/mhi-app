@@ -135,6 +135,16 @@ export interface IngestInfo {
   files: IngestFile[];
   preflightOk: boolean;
   job: IngestJob | null;
+  /** CSVアップロード1ファイルあたりの上限（MB） */
+  uploadMaxMb: number;
+}
+
+export interface IngestUploadResult {
+  saved: boolean;
+  key?: string;
+  missing?: string[];
+  files: IngestFile[];
+  preflightOk: boolean;
 }
 
 export interface OwnerRow {

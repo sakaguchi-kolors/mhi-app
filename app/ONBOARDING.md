@@ -68,7 +68,7 @@ CSV(CP932/UTF-8) → ETL＋算出バッチ → PostgreSQL → REST API → フ�
 | API | `backend/src/*/` | NestJS Controller + Service。JWT Cookie 認証 |
 | フロント | `frontend/src/` | React + TS (Vite)。一覧(TanStack Table) / 詳細 / マスタ / 取込 |
 
-**基準日(as-of)**: `.env` の `AS_OF`。本番は取込実行時刻。サンプルは 2026-07-08 固定。
+**基準日(as-of)**: 取込成功時に実行日が `m_param.AS_OF` へ自動保存され、残日数・色・表示に使われる。`.env` の `AS_OF` は DB 未保存時の開発用フォールバックのみ。
 
 ### ディレクトリ早見表
 

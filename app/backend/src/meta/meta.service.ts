@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfigService } from '../config/app-config.service';
+import { AsOfService } from '../config/as-of.service';
 import type { Meta } from '../shared/types';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class MetaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: AppConfigService,
+    private readonly asOf: AsOfService,
   ) {}
 
   async getMeta(): Promise<Meta> {
@@ -22,7 +24,7 @@ export class MetaService {
     ]);
     const stagnantThreshold = Number(st?.value ?? this.config.stagnantThreshold);
     return {
-      asOf: this.config.asOf,
+      asOf: await this.asOf.getEffective(),
       owners: ['未割当', ...users.map((u) => u.displayName)],
       dueSource: ds?.value ?? this.config.dueSource,
       stagnantThreshold: Number.isFinite(stagnantThreshold) ? stagnantThreshold : 10,

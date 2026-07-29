@@ -89,7 +89,7 @@ npm run dev                        # Vite HMR (:5173, /api→:8787)
 |---|---|---|
 | `DATABASE_URL` | postgresql://mop:...@localhost:5432/mop | Prisma接続文字列 |
 | `CSV_DIR` | `../sample-data` | 取込元CSVフォルダ（本番は共有フォルダ実パス） |
-| `AS_OF` | `2026-07-08` | 基準日。本番は取込実行時刻 |
+| `AS_OF` | （省略可） | 開発用フォールバック。本番は取込成功時に `m_param.AS_OF` へ自動保存 |
 | `SHOP_LT_DAYS` / `MILESTONE_LT_DAYS` / `STAGNANT_THRESHOLD` | 4 / 5 / 10 | 算出既定（`m_param` で上書き可） |
 | `DUE_SOURCE` | `flexsche` | 最終納期の採用元 flexsche/pbs（未決論点） |
 
