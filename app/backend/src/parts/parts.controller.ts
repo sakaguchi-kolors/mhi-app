@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { PartsService } from './parts.service';
@@ -20,9 +20,14 @@ export class PartsController {
   }
 
   @Get('timelines')
-  @ApiOperation({ summary: '部品タイムライン一括（進捗バー用）' })
-  async timelines(): Promise<Record<string, import('../common/types').TimelineCell[]>> {
-    return this.parts.buildTimelines();
+  @ApiOperation({ summary: '部品タイムライン（進捗バー用・ids指定）' })
+  async timelines(@Query('ids') ids?: string): Promise<Record<string, import('../common/types').TimelineCell[]>> {
+    if (!ids?.trim()) return {};
+    const list = ids.split(',').map((s) => s.trim()).filter(Boolean);
+    if (list.length > 500) {
+      throw new BadRequestException('一度に取得できるのは500件までです');
+    }
+    return this.parts.buildTimelinesForIds(list);
   }
 
   @Post(':id/owner')

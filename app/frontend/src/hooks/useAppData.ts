@@ -1,19 +1,14 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Part, TimelineCell } from '../types';
+import type { Part } from '../types';
 import * as api from '../api';
 import type { RecomputeResult } from '../api';
+import { timelineCacheKey } from './usePartTimelines';
 
 export const queryKeys = {
   meta: ['meta'] as const,
   partsSummary: ['parts', 'summary'] as const,
-  partsTimelines: ['parts', 'timelines'] as const,
 };
-
-function mergeParts(summaries: Part[], timelines: Record<string, TimelineCell[]> | undefined): Part[] {
-  if (!timelines) return summaries;
-  return summaries.map((p) => ({ ...p, timeline: timelines[p.id] ?? [] }));
-}
 
 export function useMeta(enabled: boolean) {
   return useQuery({
@@ -26,7 +21,10 @@ export function useMeta(enabled: boolean) {
 export function usePartMutations(toast: { show: (msg: string) => void }) {
   const qc = useQueryClient();
 
-  const invalidate = useCallback(() => qc.invalidateQueries({ queryKey: ['parts'] }), [qc]);
+  const invalidate = useCallback(() => {
+    qc.removeQueries({ queryKey: timelineCacheKey });
+    qc.invalidateQueries({ queryKey: ['parts'] });
+  }, [qc]);
 
   const patchPart = useCallback(
     (id: string, patch: Partial<Part>) => {
@@ -101,7 +99,10 @@ export function usePartMutations(toast: { show: (msg: string) => void }) {
   const runRecompute = useCallback(
     async (opts?: { background?: boolean }): Promise<RecomputeResult> => {
       const result = await recomputeMutation.mutateAsync();
-      const inv = qc.invalidateQueries({ queryKey: ['parts'] });
+      const inv = (async () => {
+        qc.removeQueries({ queryKey: timelineCacheKey });
+        await qc.invalidateQueries({ queryKey: ['parts'] });
+      })();
       if (opts?.background) void inv;
       else await inv;
       return result;
@@ -135,7 +136,6 @@ export type AppData = {
   parts: Part[];
   meta: import('../types').Meta | null;
   isLoading: boolean;
-  timelinesLoading: boolean;
   loadError: string | null;
   reload: () => Promise<void>;
 };
@@ -147,31 +147,19 @@ export function useAppData(enabled: boolean): AppData {
     queryFn: api.getParts,
     enabled,
   });
-  const timelinesQ = useQuery({
-    queryKey: queryKeys.partsTimelines,
-    queryFn: api.getPartTimelines,
-    enabled: enabled && !!summaryQ.data,
-  });
   const qc = useQueryClient();
-
-  const parts = useMemo(
-    () => mergeParts(summaryQ.data ?? [], timelinesQ.data),
-    [summaryQ.data, timelinesQ.data],
-  );
 
   const loadError =
     metaQ.error != null
       ? formatQueryError(metaQ.error)
       : summaryQ.error != null
         ? formatQueryError(summaryQ.error)
-        : timelinesQ.error != null
-          ? formatQueryError(timelinesQ.error)
-          : null;
+        : null;
 
   const isLoading = enabled && summaryQ.isLoading;
-  const timelinesLoading = enabled && (!!summaryQ.data && timelinesQ.isLoading);
 
   const reload = async () => {
+    qc.removeQueries({ queryKey: timelineCacheKey });
     await Promise.all([
       qc.invalidateQueries({ queryKey: queryKeys.meta }),
       qc.invalidateQueries({ queryKey: ['parts'] }),
@@ -179,10 +167,9 @@ export function useAppData(enabled: boolean): AppData {
   };
 
   return {
-    parts,
+    parts: summaryQ.data ?? [],
     meta: metaQ.data ?? null,
     isLoading,
-    timelinesLoading,
     loadError,
     reload,
   };

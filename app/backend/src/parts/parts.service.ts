@@ -62,7 +62,14 @@ export class PartsService {
     return summaries;
   }
 
-  /** 進捗バー用タイムライン（バックグラウンド取得向け） */
+  /** 指定部品のタイムラインのみ（進捗バー用・ページ単位取得） */
+  async buildTimelinesForIds(ids: string[]): Promise<Record<string, TimelineCell[]>> {
+    const unique = [...new Set(ids.filter(Boolean))];
+    if (!unique.length) return {};
+    return this.assembleTimelines(unique);
+  }
+
+  /** 全件タイムライン（後方互換・ETL等） */
   async buildTimelines(): Promise<Record<string, TimelineCell[]>> {
     const computedAt = await this.loadComputedAt();
     const cached = this.partsCache;
@@ -142,9 +149,12 @@ export class PartsService {
     });
   }
 
-  private async assembleTimelines(): Promise<Record<string, TimelineCell[]>> {
+  private async assembleTimelines(osIds?: string[]): Promise<Record<string, TimelineCell[]>> {
     const [timeline, vendor] = await Promise.all([
-      this.prisma.timeline.findMany({ orderBy: [{ osId: 'asc' }, { seq: 'asc' }] }),
+      this.prisma.timeline.findMany({
+        where: osIds?.length ? { osId: { in: osIds } } : undefined,
+        orderBy: [{ osId: 'asc' }, { seq: 'asc' }],
+      }),
       this.prisma.vendor.findMany({ where: { active: true }, select: { orderPrefix: true, vendorName: true } }),
     ]);
     const vendorOf = buildVendorLookup(vendor);

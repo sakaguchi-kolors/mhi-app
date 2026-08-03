@@ -8,6 +8,7 @@ import { sevRank, jc } from '../util';
 import { ProgressBar } from './ProgressBar';
 import { usePartsFilter } from '../hooks/usePartsFilter';
 import { usePagedTableTransition } from '../hooks/usePagedTableTransition';
+import { mergePartTimeline, usePartTimelines } from '../hooks/usePartTimelines';
 import { PartsListKpi } from './parts/PartsListKpi';
 import { PartsListToolbar } from './parts/PartsListToolbar';
 import { MemoModal } from './shared/MemoModal';
@@ -62,6 +63,9 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
 
   useEffect(() => { setPagination((p) => ({ ...p, pageIndex: 0 })); }, [filter, query, cat, owner, kishu, showShelved]);
 
+  const [visibleIds, setVisibleIds] = useState<string[]>([]);
+  const { timelines } = usePartTimelines(visibleIds);
+
   const columns = useMemo<ColumnDef<Part>[]>(() => [
     {
       id: 'kishu', header: '機種', accessorFn: (p) => p.kishu,
@@ -98,7 +102,7 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
         );
       },
     },
-    { id: 'progress', header: '進捗（Shop工程）', enableSorting: false, cell: ({ row }) => <ProgressBar p={row.original} /> },
+    { id: 'progress', header: '進捗（Shop工程）', enableSorting: false, cell: ({ row }) => <ProgressBar p={mergePartTimeline(row.original, timelines)} /> },
     {
       id: 'stag', header: '滞留状況', accessorFn: (p) => p.stagnant, sortingFn: (a, b) => b.original.stagnant - a.original.stagnant,
       cell: ({ row }) => {
@@ -183,7 +187,7 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
         );
       },
     },
-  ], [owners, onOwner, onTrouble, onShelved, stagnantThreshold]);
+  ], [owners, onOwner, onTrouble, onShelved, stagnantThreshold, timelines]);
 
   const table = useReactTable({
     data: filtered, columns,
@@ -194,6 +198,14 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   });
+
+  useEffect(() => {
+    const ids = table.getRowModel().rows.map((r) => r.original.id);
+    setVisibleIds((prev) => {
+      if (prev.length === ids.length && prev.every((id, i) => id === ids[i])) return prev;
+      return ids;
+    });
+  }, [filtered, pageIndex, pageSize, sorting]);
 
   const pageCount = table.getPageCount();
   const from = total === 0 ? 0 : pageIndex * pageSize + 1;

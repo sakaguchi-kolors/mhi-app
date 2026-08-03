@@ -16,6 +16,7 @@ import { PAGE_TITLES, routes, screenFromPath } from './routes';
 import { Loading } from './components/Loading';
 import { useAuth } from './context/AuthContext';
 import { useAppData, usePartMutations } from './hooks/useAppData';
+import { mergePartTimeline, usePartTimelines } from './hooks/usePartTimelines';
 
 function AdminRoute({ admin, children }: { admin: boolean; children: React.ReactNode }) {
   if (!admin) return <Navigate to={routes.parts} replace />;
@@ -42,8 +43,10 @@ function PartDetailRoute({
     return <Navigate to={routes.parts} replace />;
   }
   const part = id ? parts.find((p) => p.id === id) : undefined;
+  const { timelines, loading: tlLoading } = usePartTimelines(id ? [id] : []);
+  const partWithTimeline = part ? mergePartTimeline(part, timelines) : undefined;
   if (!id) return <Navigate to={routes.parts} replace />;
-  if (!part) {
+  if (!partWithTimeline) {
     if (isLoading) return null;
     return (
       <div className="panel">
@@ -54,7 +57,23 @@ function PartDetailRoute({
       </div>
     );
   }
-  return <PartDetail part={part} stagnantThreshold={stagnantThreshold} onBack={() => navigate(routes.parts)} onNote={onNote} />;
+  if (tlLoading && !timelines[id]) {
+    return (
+      <section>
+        <div className="detail-head">
+          <div className="detail-title">
+            <h2>{partWithTimeline.name}</h2>
+            <div className="detail-meta">
+              <span className="pno">{partWithTimeline.partNo} #{partWithTimeline.inst}</span>
+            </div>
+          </div>
+          <button className="back-btn" onClick={() => navigate(routes.parts)}>← 一覧へ戻る</button>
+        </div>
+        <Loading variant="veil" label="工程タイムラインを読み込み中…" />
+      </section>
+    );
+  }
+  return <PartDetail part={partWithTimeline} stagnantThreshold={stagnantThreshold} onBack={() => navigate(routes.parts)} onNote={onNote} />;
 }
 
 function AppLayout({

@@ -63,7 +63,11 @@ export const updateUser = (
 // ===== 業務 =====
 export const getMeta = () => get<Meta>('/api/meta');
 export const getParts = () => get<Part[]>('/api/parts');
-export const getPartTimelines = () => get<Record<string, import('./types').TimelineCell[]>>('/api/parts/timelines');
+export const getPartTimelines = (ids: string[]) => {
+  if (!ids.length) return Promise.resolve({} as Record<string, import('./types').TimelineCell[]>);
+  const q = new URLSearchParams({ ids: ids.join(',') });
+  return get<Record<string, import('./types').TimelineCell[]>>(`/api/parts/timelines?${q}`);
+};
 export const setOwner = (id: string, owner: string) => post(`/api/parts/${encodeURIComponent(id)}/owner`, { owner });
 export const setTrouble = (id: string, flagged: boolean) => post(`/api/parts/${encodeURIComponent(id)}/trouble`, { flagged });
 export const setShelved = (id: string, flagged: boolean) => post(`/api/parts/${encodeURIComponent(id)}/shelved`, { flagged });
