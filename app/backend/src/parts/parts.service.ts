@@ -8,9 +8,35 @@ import { mmdd, ymd, daysSince } from '../shared/dates';
 
 const MAX_TEXT_LEN = 2000;
 
+type TimelineRow = {
+  osId: string;
+  shop: string | null;
+  name: string | null;
+  status: string | null;
+  planEnd: Date | null;
+  isMilestone: boolean;
+  msPassed: boolean | null;
+  msColor: string | null;
+  msDue: Date | null;
+  gaic: boolean;
+  gaicStatus: string | null;
+  gaicPhase: string | null;
+  outDate: Date | null;
+  inDate: Date | null;
+  etaDate: Date | null;
+  reqDueDate: Date | null;
+  orderNo: string | null;
+};
+
+type PartsCache = {
+  computedAt: Date | null;
+  summaries: Part[];
+  timelines: Record<string, TimelineCell[]> | null;
+};
+
 @Injectable()
 export class PartsService {
-  private partsCache: { computedAt: Date | null; parts: Part[] } | null = null;
+  private partsCache: PartsCache | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -22,71 +48,66 @@ export class PartsService {
     this.partsCache = null;
   }
 
-  async buildParts(): Promise<Part[]> {
-    const latest = await this.prisma.partStatus.aggregate({ _max: { computedAt: true } });
-    const computedAt = latest._max.computedAt ?? null;
-    if (this.partsCache && this.partsCache.computedAt?.getTime() === computedAt?.getTime()) {
-      return this.partsCache.parts;
+  /** 一覧向け（タイムラインなし・軽量） */
+  async buildPartsSummary(): Promise<Part[]> {
+    const computedAt = await this.loadComputedAt();
+    const cached = this.partsCache;
+    if (cached && cached.computedAt?.getTime() === computedAt?.getTime() && cached.summaries.length) {
+      return cached.summaries;
     }
+    const summaries = await this.assembleSummaries(computedAt);
+    const keepTimelines =
+      cached && cached.computedAt?.getTime() === computedAt?.getTime() ? cached.timelines : null;
+    this.partsCache = { computedAt, summaries, timelines: keepTimelines };
+    return summaries;
+  }
 
+  /** 進捗バー用タイムライン（バックグラウンド取得向け） */
+  async buildTimelines(): Promise<Record<string, TimelineCell[]>> {
+    const computedAt = await this.loadComputedAt();
+    const cached = this.partsCache;
+    if (cached && cached.computedAt?.getTime() === computedAt?.getTime() && cached.timelines) {
+      return cached.timelines;
+    }
+    const timelines = await this.assembleTimelines();
+    if (cached && cached.computedAt?.getTime() === computedAt?.getTime()) {
+      this.partsCache = { computedAt: cached.computedAt, summaries: cached.summaries, timelines };
+    } else {
+      this.partsCache = { computedAt, summaries: cached?.summaries ?? [], timelines };
+    }
+    return timelines;
+  }
+
+  /** 一覧＋タイムライン（後方互換・ETL 等） */
+  async buildParts(): Promise<Part[]> {
+    const summaries = await this.buildPartsSummary();
+    const timelines = await this.buildTimelines();
+    return summaries.map((p) => ({ ...p, timeline: timelines[p.id] ?? [] }));
+  }
+
+  private async loadComputedAt(): Promise<Date | null> {
+    const latest = await this.prisma.partStatus.aggregate({ _max: { computedAt: true } });
+    return latest._max.computedAt ?? null;
+  }
+
+  private async assembleSummaries(computedAt: Date | null): Promise<Part[]> {
     const asOf = await this.asOf.getEffectiveDate();
-    const [status, timeline, assign, trouble, shelved, note, vendor] = await Promise.all([
+    const [status, assign, trouble, shelved, note] = await Promise.all([
       this.prisma.partStatus.findMany(),
-      this.prisma.timeline.findMany({ orderBy: [{ osId: 'asc' }, { seq: 'asc' }] }),
       this.prisma.assignment.findMany({
         select: { osId: true, userId: true, assignedAt: true, user: { select: { displayName: true } } },
       }),
       this.prisma.trouble.findMany({ select: { osId: true, flagged: true, flaggedAt: true, memo: true } }),
       this.prisma.shelved.findMany({ select: { osId: true, flagged: true } }),
       this.prisma.note.findMany({ select: { osId: true, body: true } }),
-      this.prisma.vendor.findMany({ where: { active: true }, select: { orderPrefix: true, vendorName: true } }),
     ]);
-
-    const vendors = vendor
-      .map((r) => ({ prefix: String(r.orderPrefix), name: String(r.vendorName) }))
-      .sort((a, b) => b.prefix.length - a.prefix.length);
-    const vendorOf = (order?: string | null): string | undefined => {
-      if (!order) return undefined;
-      return vendors.find((v) => order.startsWith(v.prefix))?.name;
-    };
-
-    const tlByOs = new Map<string, TimelineCell[]>();
-    for (const r of timeline) {
-      const cell: TimelineCell = {
-        shop: r.shop ?? '',
-        name: r.name ?? '',
-        status: (r.status ?? 'wait') as CellStatus,
-        plan: mmdd(r.planEnd),
-      };
-      if (r.isMilestone) {
-        cell.milestone = true;
-        cell.mpassed = r.msPassed ?? false;
-        if (!cell.mpassed) {
-          cell.mcolor = (r.msColor ?? undefined) as Color | undefined;
-          cell.mdue = mmdd(r.msDue);
-        }
-      }
-      if (r.gaic) {
-        cell.gaic = true;
-        cell.gorder = r.orderNo ?? undefined;
-        cell.gstat = (r.gaicStatus ?? undefined) as GaicStatus | undefined;
-        cell.gphase = (r.gaicPhase ?? undefined) as GaicPhase | undefined;
-        cell.gout = mmdd(r.outDate);
-        cell.gin = mmdd(r.inDate);
-        cell.geta = mmdd(r.etaDate);
-        cell.greq = mmdd(r.reqDueDate);
-        cell.gvendor = vendorOf(r.orderNo);
-      }
-      if (!tlByOs.has(r.osId)) tlByOs.set(r.osId, []);
-      tlByOs.get(r.osId)!.push(cell);
-    }
 
     const aMap = new Map(assign.map((r) => [r.osId, r]));
     const tMap = new Map(trouble.map((r) => [r.osId, r]));
     const sMap = new Map(shelved.map((r) => [r.osId, r]));
     const nMap = new Map(note.map((r) => [r.osId, r]));
 
-    const parts = status.map((s): Part => {
+    return status.map((s): Part => {
       const a = aMap.get(s.osId);
       const t = tMap.get(s.osId);
       const sh = sMap.get(s.osId);
@@ -108,7 +129,7 @@ export class PartsService {
         urgent: s.urgent ?? false,
         shortage: s.shortage ?? false,
         currentShop: s.currentShop ?? '',
-        timeline: tlByOs.get(s.osId) ?? [],
+        timeline: [],
         inst: String(s.osId).replace(/\D/g, '').slice(-4),
         owner,
         ownerDays: owner === '未割当' ? null : daysSince(a?.assignedAt ?? null, asOf),
@@ -119,9 +140,21 @@ export class PartsService {
         shelved: sh?.flagged ?? false,
       };
     });
+  }
 
-    this.partsCache = { computedAt, parts };
-    return parts;
+  private async assembleTimelines(): Promise<Record<string, TimelineCell[]>> {
+    const [timeline, vendor] = await Promise.all([
+      this.prisma.timeline.findMany({ orderBy: [{ osId: 'asc' }, { seq: 'asc' }] }),
+      this.prisma.vendor.findMany({ where: { active: true }, select: { orderPrefix: true, vendorName: true } }),
+    ]);
+    const vendorOf = buildVendorLookup(vendor);
+    const tlByOs = new Map<string, TimelineCell[]>();
+    for (const r of timeline as TimelineRow[]) {
+      const cell = toTimelineCell(r, vendorOf);
+      if (!tlByOs.has(r.osId)) tlByOs.set(r.osId, []);
+      tlByOs.get(r.osId)!.push(cell);
+    }
+    return Object.fromEntries(tlByOs);
   }
 
   async setOwner(
@@ -237,4 +270,43 @@ export class PartsService {
       note: n?.body ?? '',
     };
   }
+}
+
+function buildVendorLookup(vendor: { orderPrefix: string; vendorName: string }[]) {
+  const vendors = vendor
+    .map((r) => ({ prefix: String(r.orderPrefix), name: String(r.vendorName) }))
+    .sort((a, b) => b.prefix.length - a.prefix.length);
+  return (order?: string | null): string | undefined => {
+    if (!order) return undefined;
+    return vendors.find((v) => order.startsWith(v.prefix))?.name;
+  };
+}
+
+function toTimelineCell(r: TimelineRow, vendorOf: (order?: string | null) => string | undefined): TimelineCell {
+  const cell: TimelineCell = {
+    shop: r.shop ?? '',
+    name: r.name ?? '',
+    status: (r.status ?? 'wait') as CellStatus,
+    plan: mmdd(r.planEnd),
+  };
+  if (r.isMilestone) {
+    cell.milestone = true;
+    cell.mpassed = r.msPassed ?? false;
+    if (!cell.mpassed) {
+      cell.mcolor = (r.msColor ?? undefined) as Color | undefined;
+      cell.mdue = mmdd(r.msDue);
+    }
+  }
+  if (r.gaic) {
+    cell.gaic = true;
+    cell.gorder = r.orderNo ?? undefined;
+    cell.gstat = (r.gaicStatus ?? undefined) as GaicStatus | undefined;
+    cell.gphase = (r.gaicPhase ?? undefined) as GaicPhase | undefined;
+    cell.gout = mmdd(r.outDate);
+    cell.gin = mmdd(r.inDate);
+    cell.geta = mmdd(r.etaDate);
+    cell.greq = mmdd(r.reqDueDate);
+    cell.gvendor = vendorOf(r.orderNo);
+  }
+  return cell;
 }

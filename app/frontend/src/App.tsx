@@ -144,35 +144,31 @@ function AppLayout({
                   <Route
                     path={routes.parts}
                     element={
-                      meta ? (
-                        <PartsList
-                          parts={parts}
-                          owners={meta.owners}
-                          stagnantThreshold={meta.stagnantThreshold}
-                          admin={admin}
-                          defaultOwnerFilter={admin ? undefined : me.displayName}
-                          onAutoAssign={onAutoAssign}
-                          onOpen={openDetail}
-                          onOwner={onOwner}
-                          onTrouble={onTrouble}
-                          onShelved={onShelved}
-                          onMemo={onMemo}
-                        />
-                      ) : null
+                      <PartsList
+                        parts={parts}
+                        owners={meta?.owners ?? []}
+                        stagnantThreshold={meta?.stagnantThreshold ?? 10}
+                        admin={admin}
+                        defaultOwnerFilter={admin ? undefined : me.displayName}
+                        onAutoAssign={onAutoAssign}
+                        onOpen={openDetail}
+                        onOwner={onOwner}
+                        onTrouble={onTrouble}
+                        onShelved={onShelved}
+                        onMemo={onMemo}
+                      />
                     }
                   />
                   <Route
                     path={routes.troubles}
                     element={
-                      meta ? (
-                        <TroublesDashboard
-                          parts={parts}
-                          defaultOwnerFilter={admin ? undefined : me.displayName}
-                          onOpen={openDetail}
-                          onTrouble={onTrouble}
-                          onMemo={onMemo}
-                        />
-                      ) : null
+                      <TroublesDashboard
+                        parts={parts}
+                        defaultOwnerFilter={admin ? undefined : me.displayName}
+                        onOpen={openDetail}
+                        onTrouble={onTrouble}
+                        onMemo={onMemo}
+                      />
                     }
                   />
                   <Route

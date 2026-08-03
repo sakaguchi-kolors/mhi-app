@@ -7,8 +7,18 @@ import { jc, gaicLabel, gaicPhaseLabel, gaicReqBadge, gaicEtaBadge } from '../ut
 // 長い工程数の部品はセル内を横スクロール（列幅はコンパクトに固定）。
 export function ProgressBar({ p }: { p: Part }) {
   const tl = p.timeline;
-  const n = tl.length || 1;
+  const n = tl.length || p.totalShops || 1;
   const currentCell = tl.find((t) => t.status === 'current');
+
+  if (tl.length === 0 && p.totalShops > 0) {
+    return (
+      <div className="pbarx pbarx-compact">
+        <div className="pmeta2">
+          進捗 <b>{p.doneShops}/{p.totalShops}</b>　現在：<span className="bar-cur">{p.currentShop}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pbarx">

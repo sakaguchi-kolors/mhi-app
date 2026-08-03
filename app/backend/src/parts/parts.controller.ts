@@ -14,9 +14,15 @@ export class PartsController {
   constructor(private readonly parts: PartsService) {}
 
   @Get()
-  @ApiOperation({ summary: '部品一覧（計算済み進捗・色・フラグ付き）' })
+  @ApiOperation({ summary: '部品一覧（計算済み進捗・色・フラグ付き、タイムラインなし）' })
   async list(): Promise<Part[]> {
-    return this.parts.buildParts();
+    return this.parts.buildPartsSummary();
+  }
+
+  @Get('timelines')
+  @ApiOperation({ summary: '部品タイムライン一括（進捗バー用）' })
+  async timelines(): Promise<Record<string, import('../common/types').TimelineCell[]>> {
+    return this.parts.buildTimelines();
   }
 
   @Post(':id/owner')
