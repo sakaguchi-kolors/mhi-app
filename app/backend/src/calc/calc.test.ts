@@ -4,6 +4,7 @@ import {
   bufferColor,
   isMilestone,
   gaicStatus,
+  gaicPhase,
   dayDiff,
   diffDays,
   mmdd,
@@ -32,6 +33,13 @@ describe('calc helpers', () => {
     expect(gaicStatus(false, '3_未払出', true, true)).toBe('red');
     expect(gaicStatus(false, '4_材料払出済', true, false)).toBe('yellow');
     expect(gaicStatus(false, '4_材料払出済', true, true)).toBe('blue');
+  });
+
+  it('gaicPhase progression', () => {
+    expect(gaicPhase(true, '4_材料払出済', true, true)).toBe('in_done');
+    expect(gaicPhase(false, '3_未払出', false, false)).toBe('wait_out');
+    expect(gaicPhase(false, '4_材料払出済', true, false)).toBe('out_done');
+    expect(gaicPhase(false, '4_材料払出済', true, true)).toBe('wait_in');
   });
 
   it('date utilities', () => {
@@ -71,6 +79,7 @@ describe('computePart integration', () => {
     outDate: null,
     inDate: null,
     etaDate: null,
+    reqDueDate: null,
     orderNo: '',
     ...extra,
   });
@@ -109,6 +118,9 @@ describe('computePart integration', () => {
     expect(part.color).toBe('red');
     expect(part.currentShop).toBe('不働態化処理');
     expect(part.timeline[1].gstat).toBe('blue');
+    expect(part.timeline[1].gphase).toBe('in_done');
+    expect(part.timeline[1].gout).toBe('02/01');
+    expect(part.timeline[1].gin).toBe('02/20');
     expect(part.timeline[5].mdue).toBe('07/05');
     expect(part.timeline[5].mcolor).toBe('red');
     expect(part.timeline[0].mpassed).toBe(true);

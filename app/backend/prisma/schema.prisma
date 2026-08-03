@@ -27,6 +27,7 @@ model Part {
   kishu        String? // 機種(型式)。担当チームを分ける主キー
   finalDue     DateTime? @map("final_due") @db.Date
   pbsDue       DateTime? @map("pbs_due") @db.Date // PBS計画納期(月末)。DUE_SOURCE切替の再計算用に保持
+  octDue       DateTime? @map("oct_due") @db.Date // OCTPuS JND最終工程日。機種別優先順位の再計算用に保持
   urgentFlag   Boolean   @default(false) @map("urgent_flag")
   shortageFlag Boolean   @default(false) @map("shortage_flag")
 
@@ -54,6 +55,7 @@ model Routing {
   outDate        DateTime? @map("out_date") @db.Date // 外注持出日
   inDate         DateTime? @map("in_date") @db.Date // 外注持込日
   etaDate        DateTime? @map("eta_date") @db.Date // 納入予定日（外注の納期回答）
+  reqDueDate     DateTime? @map("req_due_date") @db.Date // 希望納期
   orderNo        String?   @map("order_no") // 注文番号（外注PO）
 
   @@id([osId, seq])
@@ -108,7 +110,12 @@ model Timeline {
   msDue       DateTime? @map("ms_due") @db.Date
   gaic        Boolean   @default(false) // 外注区間か
   gaicStatus  String?   @map("gaic_status") // blue/yellow/red
+  gaicPhase   String?   @map("gaic_phase") // wait_out/out_done/wait_in/in_done
   orderNo     String?   @map("order_no")
+  outDate     DateTime? @map("out_date") @db.Date
+  inDate      DateTime? @map("in_date") @db.Date
+  etaDate     DateTime? @map("eta_date") @db.Date
+  reqDueDate  DateTime? @map("req_due_date") @db.Date
 
   @@id([osId, seq])
   @@index([osId], map: "idx_timeline_osid")
@@ -178,18 +185,18 @@ model Param {
 }
 
 // 中間マイルストン定義 m_milestone（画面編集）
-//   matchType: shop(完全一致) / shop_prefix(前方一致) / name_contains(名称部分一致)
+//   SHOP_JOBマスタ(t_shop_master)の行ごとに工程MS・外注フラグを保持。未登録行は両方 false。
 model Milestone {
-  id        Int      @id @default(autoincrement())
-  matchType String   @map("match_type")
-  pattern   String
-  label     String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
-  createdBy String?  @map("created_by")
-  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz()
-  updatedBy String?  @map("updated_by")
+  shop        String
+  job         String
+  isMilestone Boolean  @default(false) @map("is_milestone")
+  gaic        Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  createdBy   String?  @map("created_by")
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz()
+  updatedBy   String?  @map("updated_by")
 
+  @@id([shop, job])
   @@map("m_milestone")
 }
 
@@ -255,7 +262,25 @@ model Kishu {
   note   String?
   active Boolean @default(true)
 
+  duePriority KishuDuePriority?
+
   @@map("m_kishu")
+}
+
+// 機種別・最終納期候補の優先順位（flexsche / octopus / pbs）。未設定機種は m_param.DUE_SOURCE を使用。
+model KishuDuePriority {
+  kishu     String   @id
+  priority1 String   @map("priority_1") // flexsche | octopus | pbs
+  priority2 String   @map("priority_2")
+  priority3 String   @map("priority_3")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  createdBy String?  @map("created_by")
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz()
+  updatedBy String?  @map("updated_by")
+
+  kishuRef Kishu @relation(fields: [kishu], references: [kishu], onDelete: Cascade)
+
+  @@map("m_kishu_due_priority")
 }
 
 // 担当者×機種の多対多（担当者マスタUIのチェックボックスで設定）。取込では消さない。

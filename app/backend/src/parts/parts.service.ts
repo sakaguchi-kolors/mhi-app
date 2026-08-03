@@ -3,7 +3,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { AsOfService } from '../config/as-of.service';
 import { AuditService } from '../audit/audit.service';
-import type { Part, TimelineCell, Color, CellStatus, GaicStatus } from '../common/types';
+import type { Part, TimelineCell, Color, CellStatus, GaicStatus, GaicPhase } from '../common/types';
 import { mmdd, ymd, daysSince } from '../shared/dates';
 
 const MAX_TEXT_LEN = 2000;
@@ -17,6 +17,10 @@ export class PartsService {
     private readonly asOf: AsOfService,
     private readonly audit: AuditService,
   ) {}
+
+  clearCache(): void {
+    this.partsCache = null;
+  }
 
   async buildParts(): Promise<Part[]> {
     const latest = await this.prisma.partStatus.aggregate({ _max: { computedAt: true } });
@@ -66,6 +70,11 @@ export class PartsService {
         cell.gaic = true;
         cell.gorder = r.orderNo ?? undefined;
         cell.gstat = (r.gaicStatus ?? undefined) as GaicStatus | undefined;
+        cell.gphase = (r.gaicPhase ?? undefined) as GaicPhase | undefined;
+        cell.gout = mmdd(r.outDate);
+        cell.gin = mmdd(r.inDate);
+        cell.geta = mmdd(r.etaDate);
+        cell.greq = mmdd(r.reqDueDate);
         cell.gvendor = vendorOf(r.orderNo);
       }
       if (!tlByOs.has(r.osId)) tlByOs.set(r.osId, []);

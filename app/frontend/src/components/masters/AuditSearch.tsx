@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AuditDetailRow, MasterDef } from '../../types';
 import * as api from '../../api';
 import { fmtDateTime, str } from './shared';
+import { Loading } from '../Loading';
 import {
   AUDIT_CSV_MAX_ROWS,
   auditActionLabel,
@@ -151,8 +152,9 @@ export function AuditSearch({ defs, toast }: Props) {
         </p>
       </div>
 
-      <div className="table-wrap" style={{ marginTop: 12 }}>
-        <p className="mnote">{loading ? '読み込み中…' : `${total.toLocaleString()} 件（新しい順）`}</p>
+      <div className="table-wrap panel-loading-wrap" style={{ marginTop: 12 }}>
+        <p className="mnote">{loading ? '検索中…' : `${total.toLocaleString()} 件（新しい順）`}</p>
+        {loading && <Loading variant="veil" label="変更履歴を読み込み中…" />}
         <table className="audit-result">
           <thead>
             <tr>

@@ -1,11 +1,9 @@
 // 算出用に読み込むマスタコンテキスト（プロトタイプ masters.ts の loadMasters 相当）。
-// pg 直叩き → Prisma の型付きモデルアクセスへ置き換え。挙動は同一。
 import type { PrismaService } from '../prisma/prisma.service';
+import { milestoneRowKey } from './milestone-mark.util';
+import type { DueSourceKind } from '../etl/etl-compute.util';
+import { DUE_SOURCE_KINDS } from '../etl/etl-compute.util';
 
-export interface MilestoneRule {
-  matchType: string;
-  pattern: string;
-}
 export interface CategoryRule {
   re: RegExp;
   category: string;
@@ -19,20 +17,23 @@ export interface MasterContext {
     bufYellow: number;
     dueSource: 'flexsche' | 'pbs';
   };
-  milestoneRules: MilestoneRule[];
+  /** shop::job の Set。工程マイルストン(◎)対象 */
+  milestoneMarks: Set<string>;
+  /** shop::job の Set。外注(外)対象（OCTPuS実績と OR） */
+  gaicMarks: Set<string>;
   shopLt: Map<string, number>;
   categoryRules: CategoryRule[]; // priority昇順
   holidays: Set<string>; // 'YYYY-MM-DD'（休日）
   vendors: { prefix: string; name: string }[]; // 長いprefix優先で探索
+  /** 機種別・最終納期候補の優先順位（3段）。未登録機種は params.dueSource の2択 */
+  kishuDuePriority: Map<string, DueSourceKind[]>;
 }
 
 export async function loadMasters(prisma: PrismaService): Promise<MasterContext> {
-  const [param, ms, lt, cal, ven, cat] = await Promise.all([
+  const [param, ms, lt, cal, ven, cat, kishuDue] = await Promise.all([
     prisma.param.findMany({ select: { key: true, value: true } }),
     prisma.milestone.findMany({
-      where: { active: true },
-      select: { matchType: true, pattern: true },
-      orderBy: { id: 'asc' },
+      select: { shop: true, job: true, isMilestone: true, gaic: true },
     }),
     prisma.shopLt.findMany({ where: { active: true }, select: { shop: true, ltDays: true } }),
     prisma.calendar.findMany({ select: { calDate: true, isWorkday: true } }),
@@ -41,6 +42,9 @@ export async function loadMasters(prisma: PrismaService): Promise<MasterContext>
       where: { active: true },
       select: { pattern: true, category: true },
       orderBy: [{ priority: 'asc' }, { id: 'asc' }],
+    }),
+    prisma.kishuDuePriority.findMany({
+      select: { kishu: true, priority1: true, priority2: true, priority3: true },
     }),
   ]);
 
@@ -54,20 +58,36 @@ export async function loadMasters(prisma: PrismaService): Promise<MasterContext>
     bufYellow: numP('BUFFER_YELLOW', 0),
     dueSource: pmap.get('DUE_SOURCE') === 'pbs' ? 'pbs' : 'flexsche',
   };
+  const milestoneMarks = new Set<string>();
+  const gaicMarks = new Set<string>();
+  for (const r of ms) {
+    const key = milestoneRowKey(String(r.shop), String(r.job));
+    if (r.isMilestone) milestoneMarks.add(key);
+    if (r.gaic) gaicMarks.add(key);
+  }
   const shopLt = new Map<string, number>(lt.map((r) => [String(r.shop), Number(r.ltDays)]));
   const categoryRules: CategoryRule[] = cat.map((r) => ({ re: safeRe(r.pattern), category: r.category }));
   const holidays = new Set<string>(cal.filter((r) => r.isWorkday === false).map((r) => isoDate(r.calDate)));
   const vendors = ven
     .map((r) => ({ prefix: String(r.orderPrefix), name: String(r.vendorName) }))
     .sort((a, b) => b.prefix.length - a.prefix.length);
+  const kishuDuePriority = new Map<string, DueSourceKind[]>();
+  for (const r of kishuDue) {
+    const p: DueSourceKind[] = [r.priority1, r.priority2, r.priority3] as DueSourceKind[];
+    if (p.every((x) => DUE_SOURCE_KINDS.includes(x)) && new Set(p).size === 3) {
+      kishuDuePriority.set(String(r.kishu), p);
+    }
+  }
 
   return {
     params,
-    milestoneRules: ms.map((r) => ({ matchType: r.matchType, pattern: r.pattern })),
+    milestoneMarks,
+    gaicMarks,
     shopLt,
     categoryRules,
     holidays,
     vendors,
+    kishuDuePriority,
   };
 }
 

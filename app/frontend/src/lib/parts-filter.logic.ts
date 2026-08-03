@@ -7,16 +7,25 @@ export type PartsFilterState = {
   cat: string;
   kishu: string;
   owner: string;
+  query: string;
   showShelved: boolean;
   stagnantThreshold: number;
 };
+
+function matchesPartsQuery(p: Part, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const hay = `${p.name} ${p.id}`.toLowerCase();
+  return hay.includes(q);
+}
 
 export function matchPartsFilter(
   p: Part,
   state: PartsFilterState,
   except: 'cat' | 'kishu' | 'owner' | 'chip' | null,
 ): boolean {
-  const { filter, cat, kishu, owner, showShelved, stagnantThreshold } = state;
+  const { filter, cat, kishu, owner, query, showShelved, stagnantThreshold } = state;
+  if (!matchesPartsQuery(p, query)) return false;
   if ((p.shelved ?? false) !== showShelved) return false;
   if (except !== 'cat' && cat !== 'all' && p.category !== cat) return false;
   if (except !== 'kishu' && kishu !== 'all' && p.kishu !== kishu) return false;
@@ -32,7 +41,7 @@ export function matchPartsFilter(
 }
 
 export function computePartsKpi(parts: Part[], state: PartsFilterState) {
-  const f = parts.filter((p) => matchPartsFilter(p, state, 'chip'));
+  const f = parts.filter((p) => matchPartsFilter(p, { ...state, query: '' }, 'chip'));
   const cnt = (pred: (p: Part) => boolean) => f.filter(pred).length;
   const un = (p: Part) => (p.owner ?? '未割当') === '未割当';
   return {

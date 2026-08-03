@@ -1,237 +1,232 @@
 import { useMemo, useState } from 'react';
-import type { Part } from '../../types';
 import type { Row } from './shared';
-import { MATCH_TYPE_LABEL, matchMilestone, str, isActive } from './shared';
+import { str } from './shared';
 import { UpdatedMeta } from './RowHistory';
 
 type Props = {
   rows: Row[];
-  parts: Part[];
-  onSave: (row: Row, isNew: boolean) => Promise<boolean>;
-  onDelete: (id: unknown) => Promise<boolean>;
+  onSaveBatch: (rows: Row[]) => Promise<boolean>;
 };
 
-const MATCH_TYPES = ['name_contains', 'shop_prefix', 'shop'] as const;
+type Flags = { is_milestone: boolean; gaic: boolean };
 
-export function MilestoneEditor({ rows, parts, onSave, onDelete }: Props) {
-  const [drafts, setDrafts] = useState<Record<string, Row>>({});
-  const [newRow, setNewRow] = useState<Row>({
-    match_type: 'name_contains',
-    pattern: '',
-    label: '',
-    active: true,
-  });
+function bool(v: unknown): boolean {
+  return v === true || v === 'true';
+}
 
-  const viewRows = rows.map((r) => {
-    const id = str(r.id);
-    return drafts[id] ? { ...r, ...drafts[id] } : r;
-  });
+function rowFlags(row: Row): Flags {
+  return { is_milestone: bool(row.is_milestone), gaic: bool(row.gaic) };
+}
 
-  const activeRules = viewRows.filter((r) => isActive(r));
+export function MilestoneEditor({ rows, onSaveBatch }: Props) {
+  const [filter, setFilter] = useState('');
+  const [draft, setDraft] = useState<Record<string, Flags>>({});
+  const [saving, setSaving] = useState(false);
 
-  const previewRules = useMemo(() => {
-    const rules = [...activeRules];
-    const pattern = str(newRow.pattern).trim();
-    if (pattern) {
-      rules.push({ ...newRow, pattern, active: true });
-    }
-    return rules;
-  }, [activeRules, newRow]);
+  const resolveFlags = (row: Row): Flags => {
+    const id = str(row.shop_job);
+    return draft[id] ?? rowFlags(row);
+  };
 
-  const samples = useMemo(() => {
-    const seen = new Set<string>();
-    const hits: { shop: string; name: string; partNo: string; rule: string }[] = [];
-    for (const p of parts) {
-      for (const cell of p.timeline) {
-        const key = `${cell.shop}|${cell.name}`;
-        if (seen.has(key)) continue;
-        for (const rule of previewRules) {
-          if (matchMilestone(str(rule.match_type), str(rule.pattern), cell.shop, cell.name)) {
-            seen.add(key);
-            hits.push({
-              shop: cell.shop,
-              name: cell.name,
-              partNo: p.partNo,
-              rule: `${MATCH_TYPE_LABEL[str(rule.match_type)] ?? str(rule.match_type)}「${str(rule.pattern)}」`,
-            });
-            break;
-          }
-        }
-        if (hits.length >= 8) return hits;
-      }
-      if (hits.length >= 8) break;
-    }
-    return hits;
-  }, [parts, previewRules]);
+  const viewRows = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    const sorted = [...rows].sort((a, b) => {
+      const sa = `${str(a.shop)}::${str(a.job)}`;
+      const sb = `${str(b.shop)}::${str(b.job)}`;
+      return sa.localeCompare(sb, 'ja');
+    });
+    if (!q) return sorted;
+    return sorted.filter((r) => {
+      const hay = `${str(r.shop)} ${str(r.job)} ${str(r.name)}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rows, filter]);
 
-  const newRowPreview = useMemo(() => {
-    const pattern = str(newRow.pattern).trim();
-    if (!pattern) return [];
-    const seen = new Set<string>();
-    const hits: { shop: string; name: string; partNo: string }[] = [];
-    for (const p of parts) {
-      for (const cell of p.timeline) {
-        const key = `${cell.shop}|${cell.name}`;
-        if (seen.has(key)) continue;
-        if (matchMilestone(str(newRow.match_type), pattern, cell.shop, cell.name)) {
-          seen.add(key);
-          hits.push({ shop: cell.shop, name: cell.name, partNo: p.partNo });
-          if (hits.length >= 5) return hits;
-        }
+  const dirtyIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const [id, flags] of Object.entries(draft)) {
+      const row = rows.find((r) => str(r.shop_job) === id);
+      if (!row) continue;
+      const orig = rowFlags(row);
+      if (flags.is_milestone !== orig.is_milestone || flags.gaic !== orig.gaic) {
+        ids.add(id);
       }
     }
-    return hits;
-  }, [parts, newRow]);
+    return ids;
+  }, [draft, rows]);
 
-  const setDraft = (id: string, key: string, val: unknown) =>
-    setDrafts((prev) => ({ ...prev, [id]: { ...(prev[id] ?? {}), [key]: val } }));
+  const counts = useMemo(() => {
+    let ms = 0;
+    let gaic = 0;
+    for (const r of rows) {
+      const f = resolveFlags(r);
+      if (f.is_milestone) ms++;
+      if (f.gaic) gaic++;
+    }
+    return { total: rows.length, ms, gaic };
+  }, [rows, draft]);
+
+  const toggle = (row: Row, key: 'is_milestone' | 'gaic', on: boolean) => {
+    const id = str(row.shop_job);
+    const current = resolveFlags(row);
+    const next = { ...current, [key]: on };
+    const orig = rowFlags(row);
+    if (next.is_milestone === orig.is_milestone && next.gaic === orig.gaic) {
+      setDraft((prev) => {
+        const n = { ...prev };
+        delete n[id];
+        return n;
+      });
+    } else {
+      setDraft((prev) => ({ ...prev, [id]: next }));
+    }
+  };
+
+  const handleSave = async () => {
+    if (dirtyIds.size === 0 || saving) return;
+    const changedRows: Row[] = [];
+    for (const id of dirtyIds) {
+      const row = rows.find((r) => str(r.shop_job) === id);
+      const flags = draft[id];
+      if (!row || !flags) continue;
+      changedRows.push({
+        shop: row.shop,
+        job: row.job,
+        shop_job: row.shop_job,
+        name: row.name,
+        is_milestone: flags.is_milestone,
+        gaic: flags.gaic,
+      });
+    }
+    if (!changedRows.length) return;
+
+    setSaving(true);
+    try {
+      const ok = await onSaveBatch(changedRows);
+      if (ok) setDraft({});
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="master-forms">
       <div className="master-card">
-        <h4>検査マイルストンにする工程</h4>
+        <h4>工程マイルストン・外注の指定</h4>
         <p className="mnote">
-          タイムライン上で「検査マイルストン」とみなす工程の条件です。上から順に判定し、どれかに当てはまればマイルストンになります。
+          SHOP_JOBマスタ（CSV取込）の工程一覧です。チェックを付けた行がタイムライン上で ◎（工程マイルストン）または 外（外注）として表示されます。
         </p>
-        <p className="param-effect">変更すると：部品詳細タイムラインの検査マイルストン判定・期日（mdue）・色が変わります。</p>
-        <div className="rule-list">
-          {viewRows.map((row) => {
-            const id = str(row.id);
-            return (
-              <div key={id} className={`rule-row ${row.active === false || row.active === 'false' ? 'off' : ''}`}>
-                <label className="rule-active" title="有効">
-                  <input
-                    type="checkbox"
-                    checked={row.active === true || row.active === 'true'}
-                    onChange={(e) => setDraft(id, 'active', e.target.checked)}
-                  />
-                </label>
-                <select
-                  value={str(row.match_type)}
-                  onChange={(e) => setDraft(id, 'match_type', e.target.value)}
-                >
-                  {MATCH_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {MATCH_TYPE_LABEL[t]}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  placeholder="パターン"
-                  value={str(row.pattern)}
-                  onChange={(e) => setDraft(id, 'pattern', e.target.value)}
-                />
-                <input
-                  type="text"
-                  placeholder="名称（任意・表示用）"
-                  value={str(row.label)}
-                  onChange={(e) => setDraft(id, 'label', e.target.value)}
-                />
-                <div className="rule-actions">
-                  <UpdatedMeta row={row} />
-                  <button
-                    type="button"
-                    className="mbtn save"
-                    onClick={async () => {
-                      await onSave({ id: row.id, ...row, ...(drafts[id] ?? {}) }, false);
-                      setDrafts((p) => {
-                        const n = { ...p };
-                        delete n[id];
-                        return n;
-                      });
-                    }}
-                  >
-                    保存
-                  </button>
-                  <button
-                    type="button"
-                    className="mbtn del"
-                    disabled={row.id == null || row.id === ''}
-                    onClick={() => onDelete(row.id)}
-                  >
-                    削除
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-          <div className="rule-row new">
-            <span className="rule-active" />
-            <select
-              value={str(newRow.match_type)}
-              onChange={(e) => setNewRow((p) => ({ ...p, match_type: e.target.value }))}
-            >
-              {MATCH_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {MATCH_TYPE_LABEL[t]}
-                </option>
-              ))}
-            </select>
+        <p className="param-effect">
+          チェックを付けたあと、右下の「更新」で保存・反映します。反映後、部品詳細タイムラインの ◎ / 外 判定・検査期日（mdue）・外注ステータス色が変わります。
+        </p>
+        <div className="param-preview">
+          <div className="param-preview-row">
+            <span>工程数</span>
+            <span className="pill yellow">{counts.total} 行</span>
+            <span>工程MS</span>
+            <span className="pill green">{counts.ms}</span>
+            <span>外注</span>
+            <span className="pill green">{counts.gaic}</span>
+            {dirtyIds.size > 0 && (
+              <span className="param-delta">未保存 {dirtyIds.size} 行</span>
+            )}
+          </div>
+          <div className="param-preview-row" style={{ marginTop: 8 }}>
             <input
-              type="text"
-              placeholder="パターン"
-              value={str(newRow.pattern)}
-              onChange={(e) => setNewRow((p) => ({ ...p, pattern: e.target.value }))}
+              type="search"
+              className="milestone-filter"
+              placeholder="SHOP / JOB / 作業名称で絞り込み"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
             />
-            <input
-              type="text"
-              placeholder="名称（任意）"
-              value={str(newRow.label)}
-              onChange={(e) => setNewRow((p) => ({ ...p, label: e.target.value }))}
-            />
-            <div className="rule-actions">
-              {str(newRow.pattern).trim() && (
-                <span className="new-row-preview">
-                  {newRowPreview.length > 0
-                    ? `プレビュー: ${newRowPreview.length}件ヒット（例: ${newRowPreview[0].shop} / ${newRowPreview[0].name}）`
-                    : 'プレビュー: 該当工程なし'}
-                </span>
-              )}
-              <button
-                type="button"
-                className="mbtn add"
-                onClick={async () => {
-                  await onSave({ ...newRow, active: true }, true);
-                  setNewRow({ match_type: 'name_contains', pattern: '', label: '', active: true });
-                }}
-              >
-                ＋追加
-              </button>
-            </div>
+            {filter && (
+              <span className="param-delta ok">
+                表示 {viewRows.length} / {counts.total}
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="master-card">
-        <h4>当たりそうな工程（プレビュー）</h4>
-        <p className="mnote">有効ルールと、追加行の入力内容を含めた試算です（最大8件）。</p>
-        {samples.length === 0 ? (
-          <p className="mnote">該当する工程がありません。ルールやデータを確認してください。</p>
-        ) : (
+      {rows.length === 0 ? (
+        <div className="master-card">
+          <p className="mnote">
+            SHOP_JOBマスタが未取込です。データ取込で <b>SHOP_JOBマスタ.csv</b> を取り込むと、ここに工程一覧が表示されます。
+          </p>
+        </div>
+      ) : (
+        <div className="master-card">
           <div className="table-wrap">
-            <table className="mtable">
+            <table className="mtable milestone-grid">
               <thead>
                 <tr>
-                  <th>Shop</th>
+                  <th className="sticky-col">SHOP</th>
+                  <th>JOB</th>
                   <th>作業名称</th>
-                  <th>例の部品</th>
-                  <th>当たったルール</th>
+                  <th className="mcol" title="工程マイルストン（◎）">
+                    工程MS
+                  </th>
+                  <th className="mcol" title="外注（外）">
+                    外注
+                  </th>
+                  <th>更新</th>
                 </tr>
               </thead>
               <tbody>
-                {samples.map((s, i) => (
-                  <tr key={i}>
-                    <td>{s.shop}</td>
-                    <td>{s.name}</td>
-                    <td>{s.partNo}</td>
-                    <td>{s.rule}</td>
-                  </tr>
-                ))}
+                {viewRows.map((row) => {
+                  const id = str(row.shop_job);
+                  const flags = resolveFlags(row);
+                  const dirty = dirtyIds.has(id);
+                  return (
+                    <tr key={id} className={dirty ? 'row-dirty' : undefined}>
+                      <td className="sticky-col">{str(row.shop)}</td>
+                      <td>{str(row.job)}</td>
+                      <td>{str(row.name) || '—'}</td>
+                      <td className="mcell">
+                        <input
+                          type="checkbox"
+                          checked={flags.is_milestone}
+                          disabled={saving}
+                          onChange={(e) => toggle(row, 'is_milestone', e.target.checked)}
+                        />
+                      </td>
+                      <td className="mcell">
+                        <input
+                          type="checkbox"
+                          checked={flags.gaic}
+                          disabled={saving}
+                          onChange={(e) => toggle(row, 'gaic', e.target.checked)}
+                        />
+                      </td>
+                      <td className="mhist">
+                        <UpdatedMeta row={row} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+          {viewRows.length === 0 && filter && (
+            <p className="mnote" style={{ marginTop: 8 }}>
+              絞り込み条件に一致する工程がありません。
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="milestone-save-bar">
+        {dirtyIds.size > 0 && (
+          <span className="milestone-save-hint">未保存 {dirtyIds.size} 行</span>
         )}
+        <button
+          type="button"
+          className="mbtn save"
+          disabled={dirtyIds.size === 0 || saving}
+          onClick={handleSave}
+        >
+          {saving ? '更新中…' : '更新'}
+        </button>
       </div>
     </div>
   );

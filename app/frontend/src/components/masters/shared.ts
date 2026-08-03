@@ -9,7 +9,7 @@ import {
 
 export type Row = Record<string, unknown>;
 
-export const RECOMPUTE_MASTERS = new Set(['param', 'milestone', 'shop_lt', 'calendar', 'category']);
+export const RECOMPUTE_MASTERS = new Set(['param', 'kishu_due_priority', 'milestone', 'shop_lt', 'calendar', 'category']);
 export const LAST_RECOMPUTE_KEY = 'masters.lastRecomputeAt';
 
 export { bufferColor, colorCounts, matchMilestone, MATCH_TYPE_LABEL };

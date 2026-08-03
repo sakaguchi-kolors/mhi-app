@@ -25,14 +25,30 @@ export const MASTERS: MasterDef[] = [
     table: 'm_milestone',
     label: '中間マイルストン定義',
     group: 'edit',
-    pk: 'id',
-    autoId: true,
-    note: 'タイムライン上で検査マイルストンとみなす工程の条件。',
+    pk: 'shop_job',
+    autoId: false,
+    note: 'SHOP_JOBマスタの工程ごとに、工程マイルストン(◎)・外注(外)をチェックで指定します。保存するとタイムラインに自動反映されます。',
     columns: [
-      { key: 'match_type', label: '種別', type: 'select', options: ['shop', 'shop_prefix', 'name_contains'], required: true },
-      { key: 'pattern', label: 'パターン', type: 'text', required: true },
-      { key: 'label', label: '名称(任意)', type: 'text' },
-      { key: 'active', label: '有効', type: 'bool' },
+      { key: 'shop', label: 'SHOP', type: 'text', readonly: true },
+      { key: 'job', label: 'JOB', type: 'text', readonly: true },
+      { key: 'name', label: '作業名称', type: 'text', readonly: true },
+      { key: 'is_milestone', label: '工程マイルストン', type: 'bool' },
+      { key: 'gaic', label: '外注', type: 'bool' },
+    ],
+  },
+  {
+    name: 'kishu_due_priority',
+    table: 'm_kishu_due_priority',
+    label: '機種別納期優先順位',
+    group: 'edit',
+    pk: 'kishu',
+    autoId: false,
+    note: '機種ごとに最終納期候補（小日程/OCTPuS/計画納期）の優先順位を設定します。未設定の機種はパラメータの「最終納期の採用元」を使います。',
+    columns: [
+      { key: 'kishu', label: '機種', type: 'text', readonly: true },
+      { key: 'priority_1', label: '第1優先', type: 'select', options: ['flexsche', 'octopus', 'pbs'] },
+      { key: 'priority_2', label: '第2優先', type: 'select', options: ['flexsche', 'octopus', 'pbs'] },
+      { key: 'priority_3', label: '第3優先', type: 'select', options: ['flexsche', 'octopus', 'pbs'] },
     ],
   },
   {
@@ -104,7 +120,7 @@ export const DEFAULT_PARAMS: { key: string; value: string; description: string }
   { key: 'STAGNANT_THRESHOLD', value: '10', description: 'レッドフラッグの滞留日数閾値' },
   { key: 'BUFFER_GREEN', value: '1', description: 'バッファがこの値以上で緑' },
   { key: 'BUFFER_YELLOW', value: '0', description: 'バッファがこの値以上（緑未満）で黄。未満は赤' },
-  { key: 'DUE_SOURCE', value: 'flexsche', description: '最終納期の採用元 flexsche/pbs（未決論点）' },
+  { key: 'DUE_SOURCE', value: 'flexsche', description: '未設定機種向けの最終納期採用元 flexsche/pbs（2択+欠損フォールバック）' },
 ];
 
 export const DEFAULT_MILESTONES: { match_type: string; pattern: string; label: string }[] = [

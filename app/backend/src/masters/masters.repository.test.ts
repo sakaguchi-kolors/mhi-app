@@ -30,4 +30,21 @@ describe('masters.repository modelToRow', () => {
     expect(row.cal_date).toBe('2026-07-15');
     expect(row.is_workday).toBe(false);
   });
+
+  it('maps milestone flags to API columns', () => {
+    const def = MASTERS.find((d) => d.name === 'milestone')!;
+    const row = modelToRow(def, {
+      shop: '7P31',
+      job: '001',
+      name: '検査',
+      isMilestone: true,
+      gaic: false,
+      shop_job: '7P31::001',
+    });
+    expect(row.shop).toBe('7P31');
+    expect(row.job).toBe('001');
+    expect(row.is_milestone).toBe(true);
+    expect(row.gaic).toBe(false);
+    expect(row.shop_job).toBe('7P31::001');
+  });
 });

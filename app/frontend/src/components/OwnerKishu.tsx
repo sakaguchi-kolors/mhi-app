@@ -3,7 +3,7 @@ import type { OwnerRow } from '../types';
 import * as api from '../api';
 import { useAuth } from '../context/AuthContext';
 import type { ToastState } from './Toast';
-import { KishuMultiSelect } from './KishuMultiSelect';
+import { Loading } from './Loading';
 
 const isEngineer = (role: string) => role !== '管理者';
 
@@ -19,9 +19,12 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
   const [kishus, setKishus] = useState<string[]>([]);
   const [owners, setOwners] = useState<OwnerRow[]>([]);
   const [passwords, setPasswords] = useState<Record<number, string>>({});
-  const [newRow, setNewRow] = useState({ email: '', displayName: '', password: '', role: '工程員', active: true, kishus: [] as string[] });
+  const [newRow, setNewRow] = useState({ email: '', displayName: '', password: '', role: '工程員', active: true });
+  const [expanded, setExpanded] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const d = await api.getOwners();
       setKishus(d.kishus);
@@ -30,6 +33,8 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
     } catch (e) {
       console.error(e);
       toast.show('担当者の取得に失敗しました');
+    } finally {
+      setLoading(false);
     }
   }, [toast]);
   useEffect(() => {
@@ -90,24 +95,15 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
       return;
     }
     try {
-      const created = await api.createUser({
+      await api.createUser({
         email: newRow.email.trim(),
         password: newRow.password,
         displayName: newRow.displayName.trim() || newRow.email.trim(),
         role: newRow.role,
       });
-      try {
-        for (const kishu of isEngineer(newRow.role) ? newRow.kishus : []) {
-          await api.toggleOwnerKishu(created.userId, kishu, true);
-        }
-        setNewRow({ email: '', displayName: '', password: '', role: '工程員', active: true, kishus: [] });
-        await load();
-        toast.show('追加しました');
-      } catch (e) {
-        console.error(e);
-        await load();
-        toast.show('ユーザーは作成済みですが、担当機種の設定に失敗しました');
-      }
+      setNewRow({ email: '', displayName: '', password: '', role: '工程員', active: true });
+      await load();
+      toast.show('追加しました（機種はチェックで設定できます）');
     } catch (e) {
       console.error(e);
       toast.show(e instanceof Error ? e.message : '追加に失敗しました');
@@ -138,11 +134,19 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
           <h2>担当者</h2>
           <p>
             担当者＝ログインユーザーです。表示名・メール・パスワード（変更時のみ）・役割を設定します。
-            担当機種は工程員向けの設定で、「未割当を自動割り当て」の対象機種（TJ・37B など）です。
-            管理者は部品の担当者にならないため不要です。
+            工程員は担当する機種にチェックを入れてください（「未割当を自動割り当て」の対象）。
+            複数人が同じ機種を担当してもOK（自動割り当てで均等に配分）。管理者は部品の担当者にならないため不要です。
           </p>
         </div>
+        <button type="button" className="back-btn" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? '▼ 機種を隠す' : '▶ 機種の担当を編集'}
+        </button>
       </div>
+      {loading ? (
+        <div className="panel panel-loading-wrap" style={{ minHeight: 200 }}>
+          <Loading variant="veil" label="担当者を読み込み中…" />
+        </div>
+      ) : (
       <div className="panel">
         <div className="table-wrap">
           <table className="mtable owner-kishu">
@@ -153,13 +157,16 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
                 <th className="col-password">パスワード</th>
                 <th className="col-role">役割</th>
                 <th>有効</th>
-                <th className="col-kishu">担当機種</th>
+                {expanded
+                  ? kishus.map((k) => <th key={k} className="kcol" title={`機種 ${k}`}>{k}</th>)
+                  : <th>担当機種</th>}
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
               {owners.map((o) => {
                 const isSelf = me?.userId === o.user_id;
+                const set = new Set(o.kishus);
                 return (
                 <tr key={o.user_id} className={o.active ? '' : 'row-inactive'}>
                   <td className="sticky-col col-name">
@@ -185,18 +192,32 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
                   <td style={{ textAlign: 'center' }}>
                     <input type="checkbox" checked={o.active} disabled={isSelf} onChange={(e) => setField(o.user_id, 'active', e.target.checked)} />
                   </td>
-                  <td className="col-kishu">
-                    {isEngineer(o.role) ? (
-                      <KishuMultiSelect
-                        options={kishus}
-                        value={o.kishus}
-                        disabled={!o.active}
-                        onToggle={(kishu, on) => toggle(o, kishu, on)}
-                      />
+                  {expanded ? (
+                    isEngineer(o.role) ? (
+                      kishus.map((k) => (
+                        <td key={k} className="kcell">
+                          <input
+                            type="checkbox"
+                            checked={set.has(k)}
+                            disabled={!o.active}
+                            onChange={(e) => toggle(o, k, e.target.checked)}
+                          />
+                        </td>
+                      ))
                     ) : (
-                      <span className="kishu-ms-na">—</span>
-                    )}
-                  </td>
+                      <td colSpan={kishus.length || 1} className="ksum"><span style={{ color: 'var(--muted)' }}>—</span></td>
+                    )
+                  ) : (
+                    <td className="ksum">
+                      {isEngineer(o.role) ? (
+                        o.kishus.length
+                          ? `${o.kishus.length}機種：${[...o.kishus].sort().join('・')}`
+                          : <span style={{ color: 'var(--muted)' }}>未設定</span>
+                      ) : (
+                        <span style={{ color: 'var(--muted)' }}>—</span>
+                      )}
+                    </td>
+                  )}
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button type="button" className="mbtn save" onClick={() => savePerson(o)}>保存</button>{' '}
                     {o.active && !isSelf && (
@@ -217,13 +238,7 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
                   <input type="password" placeholder="8文字以上" value={newRow.password} onChange={(e) => setNewRow((p) => ({ ...p, password: e.target.value }))} />
                 </td>
                 <td className="col-role">
-                  <select
-                    value={newRow.role}
-                    onChange={(e) => {
-                      const role = e.target.value;
-                      setNewRow((p) => ({ ...p, role, kishus: isEngineer(role) ? p.kishus : [] }));
-                    }}
-                  >
+                  <select value={newRow.role} onChange={(e) => setNewRow((p) => ({ ...p, role: e.target.value }))}>
                     <option value="工程員">工程員</option>
                     <option value="管理者">管理者</option>
                   </select>
@@ -231,21 +246,8 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
                 <td style={{ textAlign: 'center' }}>
                   <input type="checkbox" checked={newRow.active} onChange={(e) => setNewRow((p) => ({ ...p, active: e.target.checked }))} disabled title="新規は有効で登録されます" />
                 </td>
-                <td className="col-kishu">
-                  {isEngineer(newRow.role) ? (
-                    <KishuMultiSelect
-                      options={kishus}
-                      value={newRow.kishus}
-                      onToggle={(kishu, on) =>
-                        setNewRow((p) => ({
-                          ...p,
-                          kishus: on ? [...p.kishus, kishu] : p.kishus.filter((k) => k !== kishu),
-                        }))
-                      }
-                    />
-                  ) : (
-                    <span className="kishu-ms-na">—</span>
-                  )}
+                <td colSpan={expanded && kishus.length ? kishus.length : 1} style={{ color: 'var(--muted)', fontSize: 11 }}>
+                  追加後に機種を選べます
                 </td>
                 <td><button type="button" className="mbtn add" onClick={addPerson}>＋追加</button></td>
               </tr>
@@ -253,6 +255,7 @@ export function OwnerKishu({ toast }: { toast: ToastState }) {
           </table>
         </div>
       </div>
+      )}
     </section>
   );
 }

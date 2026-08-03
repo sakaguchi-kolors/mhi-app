@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { IngestInfo } from '../types';
 import * as api from '../api';
 import type { ToastState } from './Toast';
+import { Loading } from './Loading';
 
 const MB = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
 const fmtTime = (s: string | null) => (s ? s.replace('T', ' ').slice(0, 19) : '—');
@@ -19,6 +20,7 @@ const emptyDraft = (): UploadDraft => ({ flexsche: null, pbs: null, octopus: nul
 
 export function Ingest({ toast, onIngested }: { toast: ToastState; onIngested: () => Promise<void> }) {
   const [info, setInfo] = useState<IngestInfo | null>(null);
+  const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ key: string; label: string; pct: number } | null>(null);
@@ -33,6 +35,8 @@ export function Ingest({ toast, onIngested }: { toast: ToastState; onIngested: (
     } catch (e) {
       console.error(e);
       toast.show('取込情報の取得に失敗しました');
+    } finally {
+      setLoading(false);
     }
   }, [toast]);
 
@@ -173,8 +177,9 @@ export function Ingest({ toast, onIngested }: { toast: ToastState; onIngested: (
         </div>
       </div>
 
-      <div className="panel">
+      <div className="panel panel-loading-wrap">
         <p className="mnote">対象フォルダ：<code>{info?.dir ?? '—'}</code></p>
+        {loading && <Loading variant="veil" label="取込情報を読み込み中…" />}
         <div className="table-wrap">
           <table className="mtable">
             <thead>
@@ -193,7 +198,9 @@ export function Ingest({ toast, onIngested }: { toast: ToastState; onIngested: (
                   </td>
                 </tr>
               ))}
-              {(!info || info.files.length === 0) && <tr><td colSpan={6} style={{ padding: 12 }}>読み込み中…</td></tr>}
+              {(!loading && info?.files.length === 0) && (
+                <tr><td colSpan={6} style={{ padding: 12, color: 'var(--muted)' }}>ファイル情報がありません</td></tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -5,6 +5,7 @@ import {
   bufferColor,
   isMilestone,
   gaicStatus,
+  gaicPhase,
   dayDiff,
   diffDays,
   mmdd,
@@ -33,6 +34,10 @@ eq('gaic 戻り済=blue', gaicStatus(true, 'x', true, false), 'blue');
 eq('gaic 未払出=red', gaicStatus(false, '3_未払出', true, true), 'red');
 eq('gaic 回答待ち=yellow', gaicStatus(false, '4_材料払出済', true, false), 'yellow');
 eq('gaic 順調=blue', gaicStatus(false, '4_材料払出済', true, true), 'blue');
+eq('gaicPhase 持出待', gaicPhase(false, '3_未払出', false, false), 'wait_out');
+eq('gaicPhase 持出済', gaicPhase(false, '4_材料払出済', true, false), 'out_done');
+eq('gaicPhase 納入待', gaicPhase(false, '4_材料払出済', true, true), 'wait_in');
+eq('gaicPhase 持込済', gaicPhase(true, '4_材料払出済', true, true), 'in_done');
 // --- 単体：日付ユーティリティ ---
 const d0 = (s: string) => new Date(s + 'T00:00:00');
 eq('diffDays 同じ日', diffDays(d0('2026-07-08'), d0('2026-07-08')), 0);
@@ -45,14 +50,11 @@ eq('ymd null', ymd(null), '');
 const holidays = new Set(['2026-07-09']);
 eq('dayDiff 休日1日', dayDiff(d0('2026-07-10'), d0('2026-07-08'), holidays), 1);
 eq('dayDiff 休日なし', dayDiff(d0('2026-07-10'), d0('2026-07-08')), 2);
-// --- 単体：マイルストン判定（マスタルール） ---
-const rules = [
-  { matchType: 'shop' as const, pattern: '7P31' },
-  { matchType: 'name_contains' as const, pattern: '検査' },
-];
-eq('milestone rule shop', isMilestone('7P31', '任意', rules), true);
-eq('milestone rule name', isMilestone('8A99', '最終検査', rules), true);
-eq('milestone rule miss', isMilestone('8A21', '旋削', rules), false);
+// --- 単体：マイルストン判定（shop::job マーク） ---
+const marks = new Set(['7P31::J1', '8A99::J2']);
+eq('milestone mark hit', isMilestone('7P31', '任意', marks, 'J1'), true);
+eq('milestone mark miss shop', isMilestone('8A21', '旋削', marks, 'J1'), false);
+eq('milestone mark miss job', isMilestone('7P31', '任意', marks, 'J9'), false);
 // --- 単体：色境界（カスタム閾値） ---
 eq('color custom green=2', bufferColor(2, 2, 1), 'green');
 eq('color custom yellow=1', bufferColor(1, 2, 1), 'yellow');
@@ -84,6 +86,7 @@ const R = (i: number, shop: string, wip = false, extra: Partial<RoutingRow> = {}
   outDate: null,
   inDate: null,
   etaDate: null,
+  reqDueDate: null,
   orderNo: '',
   ...extra,
 });

@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMemo } from 'react';
 import type { Part, Meta } from './types';
-import type { Me } from './api';
+import type { Me, RecomputeResult } from './api';
 import { PartsList } from './components/PartsList';
 import { TroublesDashboard } from './components/TroublesDashboard';
 import { PartDetail } from './components/PartDetail';
@@ -13,6 +13,7 @@ import { Sidebar } from './components/Sidebar';
 import { Toast, useToast } from './components/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PAGE_TITLES, routes, screenFromPath } from './routes';
+import { Loading } from './components/Loading';
 import { useAuth } from './context/AuthContext';
 import { useAppData, usePartMutations } from './hooks/useAppData';
 
@@ -25,10 +26,12 @@ function PartDetailRoute({
   parts,
   stagnantThreshold,
   onNote,
+  isLoading,
 }: {
   parts: Part[];
   stagnantThreshold: number;
   onNote: (id: string, note: string) => void;
+  isLoading: boolean;
 }) {
   const { id: rawId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -41,6 +44,7 @@ function PartDetailRoute({
   const part = id ? parts.find((p) => p.id === id) : undefined;
   if (!id) return <Navigate to={routes.parts} replace />;
   if (!part) {
+    if (isLoading) return null;
     return (
       <div className="panel">
         部品が見つかりません（ID: {id}）
@@ -84,7 +88,7 @@ function AppLayout({
   onShelved: (id: string, flagged: boolean) => void;
   onMemo: (id: string, memo: string) => void;
   onNote: (id: string, note: string) => void;
-  onRecompute: () => Promise<void>;
+  onRecompute: (opts?: { background?: boolean }) => Promise<RecomputeResult>;
   onAutoAssign: () => void;
   toast: ReturnType<typeof useToast>;
 }) {
@@ -104,6 +108,8 @@ function AppLayout({
   }, [location.pathname]);
   const detailPart = detailId ? parts.find((p) => p.id === detailId) : null;
   const troubleCount = useMemo(() => parts.filter((p) => p.trouble).length, [parts]);
+  const needsPartsData = screen === 'parts' || screen === 'detail' || screen === 'troubles';
+  const showPartsVeil = needsPartsData && isLoading;
 
   const openDetail = (id: string) => {
     navigate(routes.part(id));
@@ -123,65 +129,73 @@ function AppLayout({
             {asof && <div className="asof">データ基準日 <b>{asof}</b></div>}
           </header>
           <main className="main">
-            {isLoading && (
-              <div className="panel" style={{ marginBottom: 12 }}>
-                読み込み中…
-              </div>
-            )}
             {loadError && (
-              <div className="panel" style={{ color: 'var(--red)' }}>
+              <div className="panel" style={{ color: 'var(--red)', marginBottom: 12 }}>
                 APIからの取得に失敗しました：{loadError}
                 <br />
                 バックエンド(npm run dev)とDBが起動しているか確認してください。
               </div>
             )}
 
-            <ErrorBoundary>
-              <Routes>
-                <Route path="/" element={<Navigate to={routes.parts} replace />} />
-                <Route
-                  path={routes.parts}
-                  element={
-                    meta ? (
-                      <PartsList
+            <div className="main-inner">
+              <ErrorBoundary>
+                <Routes>
+                  <Route path="/" element={<Navigate to={routes.parts} replace />} />
+                  <Route
+                    path={routes.parts}
+                    element={
+                      meta ? (
+                        <PartsList
+                          parts={parts}
+                          owners={meta.owners}
+                          stagnantThreshold={meta.stagnantThreshold}
+                          admin={admin}
+                          defaultOwnerFilter={admin ? undefined : me.displayName}
+                          onAutoAssign={onAutoAssign}
+                          onOpen={openDetail}
+                          onOwner={onOwner}
+                          onTrouble={onTrouble}
+                          onShelved={onShelved}
+                          onMemo={onMemo}
+                        />
+                      ) : null
+                    }
+                  />
+                  <Route
+                    path={routes.troubles}
+                    element={
+                      meta ? (
+                        <TroublesDashboard
+                          parts={parts}
+                          defaultOwnerFilter={admin ? undefined : me.displayName}
+                          onOpen={openDetail}
+                          onTrouble={onTrouble}
+                          onMemo={onMemo}
+                        />
+                      ) : null
+                    }
+                  />
+                  <Route
+                    path={`${routes.parts}/:id`}
+                    element={
+                      <PartDetailRoute
                         parts={parts}
-                        owners={meta.owners}
-                        stagnantThreshold={meta.stagnantThreshold}
-                        admin={admin}
-                        defaultOwnerFilter={admin ? undefined : me.displayName}
-                        onAutoAssign={onAutoAssign}
-                        onOpen={openDetail}
-                        onOwner={onOwner}
-                        onTrouble={onTrouble}
-                        onShelved={onShelved}
-                        onMemo={onMemo}
+                        stagnantThreshold={meta?.stagnantThreshold ?? 10}
+                        onNote={onNote}
+                        isLoading={isLoading}
                       />
-                    ) : null
-                  }
-                />
-                <Route
-                  path={routes.troubles}
-                  element={
-                    meta ? (
-                      <TroublesDashboard
-                        parts={parts}
-                        defaultOwnerFilter={admin ? undefined : me.displayName}
-                        onOpen={openDetail}
-                        onTrouble={onTrouble}
-                        onMemo={onMemo}
-                      />
-                    ) : null
-                  }
-                />
-                <Route path={`${routes.parts}/:id`} element={<PartDetailRoute parts={parts} stagnantThreshold={meta?.stagnantThreshold ?? 10} onNote={onNote} />} />
-                <Route path={routes.ingest} element={<AdminRoute admin={admin}><Ingest toast={toast} onIngested={reload} /></AdminRoute>} />
-                <Route path={routes.owners} element={<AdminRoute admin={admin}><OwnerKishu toast={toast} /></AdminRoute>} />
-                <Route path={routes.masters} element={<AdminRoute admin={admin}><Navigate to={routes.master('param')} replace /></AdminRoute>} />
-                <Route path={`${routes.masters}/:name`} element={<AdminRoute admin={admin}><Masters parts={parts} onRecompute={onRecompute} onReload={reload} toast={toast} /></AdminRoute>} />
-                <Route path="/users" element={<Navigate to={routes.owners} replace />} />
-                <Route path="*" element={<Navigate to={routes.parts} replace />} />
-              </Routes>
-            </ErrorBoundary>
+                    }
+                  />
+                  <Route path={routes.ingest} element={<AdminRoute admin={admin}><Ingest toast={toast} onIngested={reload} /></AdminRoute>} />
+                  <Route path={routes.owners} element={<AdminRoute admin={admin}><OwnerKishu toast={toast} /></AdminRoute>} />
+                  <Route path={routes.masters} element={<AdminRoute admin={admin}><Navigate to={routes.master('param')} replace /></AdminRoute>} />
+                  <Route path={`${routes.masters}/:name`} element={<AdminRoute admin={admin}><Masters parts={parts} onRecompute={onRecompute} onReload={reload} toast={toast} /></AdminRoute>} />
+                  <Route path="/users" element={<Navigate to={routes.owners} replace />} />
+                  <Route path="*" element={<Navigate to={routes.parts} replace />} />
+                </Routes>
+              </ErrorBoundary>
+              {showPartsVeil && <Loading variant="veil" />}
+            </div>
           </main>
         </div>
       </div>
@@ -195,16 +209,14 @@ function AuthenticatedApp() {
   const toast = useToast();
   const navigate = useNavigate();
   const { parts, meta, isLoading, loadError, reload } = useAppData(!!me);
-  const { onOwner, onTrouble, onShelved, onMemo, onNote, recompute, autoAssign } = usePartMutations(toast);
+  const { onOwner, onTrouble, onShelved, onMemo, onNote, runRecompute, autoAssign } = usePartMutations(toast);
 
   const onLogout = async () => {
     await logout();
     navigate(routes.login, { replace: true });
   };
 
-  const onRecompute = async () => {
-    await recompute.mutateAsync();
-  };
+  const onRecompute = (opts?: { background?: boolean }) => runRecompute(opts);
 
   const onAutoAssign = () => {
     const unassigned = parts.filter((p) => (p.owner ?? '未割当') === '未割当').length;
@@ -262,7 +274,7 @@ export function App() {
   if (booting) {
     return (
       <div className="app">
-        <main className="main">
+        <main className="main main-inner">
           {bootError ? (
             <div className="panel" style={{ color: 'var(--red)' }}>
               サーバーへの接続に失敗しました：{bootError}
@@ -270,7 +282,7 @@ export function App() {
               バックエンド(npm run dev)とDBが起動しているか確認してください。
             </div>
           ) : (
-            <div className="panel">読み込み中…</div>
+            <Loading variant="veil" label="認証情報を確認中…" />
           )}
         </main>
       </div>

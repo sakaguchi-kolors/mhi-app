@@ -29,20 +29,34 @@ const basePart = (over: Partial<Part> = {}): Part => ({
 
 describe('parts-filter.logic', () => {
   it('filters by color chip', () => {
-    const state = { filter: 'red' as const, cat: 'all', kishu: 'all', owner: 'all', showShelved: false, stagnantThreshold: 10 };
+    const state = { filter: 'red' as const, cat: 'all', kishu: 'all', owner: 'all', query: '', showShelved: false, stagnantThreshold: 10 };
     expect(matchPartsFilter(basePart({ color: 'red' }), state, null)).toBe(true);
     expect(matchPartsFilter(basePart({ color: 'green' }), state, null)).toBe(false);
   });
 
   it('excludes shelved unless toggled', () => {
-    const state = { filter: 'all' as const, cat: 'all', kishu: 'all', owner: 'all', showShelved: false, stagnantThreshold: 10 };
+    const state = { filter: 'all' as const, cat: 'all', kishu: 'all', owner: 'all', query: '', showShelved: false, stagnantThreshold: 10 };
     expect(matchPartsFilter(basePart({ shelved: true }), state, null)).toBe(false);
     expect(matchPartsFilter(basePart({ shelved: undefined }), state, null)).toBe(true);
   });
 
+  it('filters by part name or OS_ID query', () => {
+    const state = { filter: 'all' as const, cat: 'all', kishu: 'all', owner: 'all', query: 'abc', showShelved: false, stagnantThreshold: 10 };
+    expect(matchPartsFilter(basePart({ id: 'OS-ABC-001', name: '部品X' }), state, null)).toBe(true);
+    expect(matchPartsFilter(basePart({ id: 'OS-999', name: 'ABC部品' }), state, null)).toBe(true);
+    expect(matchPartsFilter(basePart({ id: 'OS-999', name: '部品Y' }), state, null)).toBe(false);
+  });
+
+  it('computePartsKpi ignores search query', () => {
+    const parts = [basePart(), basePart({ id: '2', owner: 'Taro', color: 'green' })];
+    const kpi = computePartsKpi(parts, { filter: 'all', cat: 'all', kishu: 'all', owner: 'all', query: 'nomatch', showShelved: false, stagnantThreshold: 10 });
+    expect(kpi.r).toBe(1);
+    expect(kpi.g).toBe(1);
+  });
+
   it('computePartsKpi counts unassigned on red', () => {
     const parts = [basePart(), basePart({ id: '2', owner: 'Taro', color: 'red' })];
-    const kpi = computePartsKpi(parts, { filter: 'all', cat: 'all', kishu: 'all', owner: 'all', showShelved: false, stagnantThreshold: 10 });
+    const kpi = computePartsKpi(parts, { filter: 'all', cat: 'all', kishu: 'all', owner: 'all', query: '', showShelved: false, stagnantThreshold: 10 });
     expect(kpi.r).toBe(2);
     expect(kpi.ru).toBe(1);
   });

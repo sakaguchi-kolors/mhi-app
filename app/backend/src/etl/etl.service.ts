@@ -13,10 +13,11 @@ import { parseDateTime, parsePbsMonthEnd, parseSeq } from './etl-dates';
 import { batchInsert } from './etl-batch';
 import { deriveCategory } from './etl-category';
 import {
+  aggregateColorCounts,
   buildCalcOpts,
   buildStatusTimelineRows,
   flexMaxFromRows,
-  resolveFinalDue,
+  resolveFinalDueForPart,
 } from './etl-compute.util';
 import {
   buildNameResolver,
@@ -101,6 +102,7 @@ export class EtlService {
         outDate: parseDateTime(r['外注持出日']),
         inDate: parseDateTime(r['外注持込日']),
         etaDate: parseDateTime(r['納入予定日']),
+        reqDueDate: parseDateTime(r['希望納期']),
         orderNo: clean(r['注文番号']),
       });
     });
@@ -127,6 +129,7 @@ export class EtlService {
 
     const octFreq = new Map<string, Map<string, number>>();
     const nameFromOct = new Map<string, string>();
+    const octJndByOsId = new Map<string, Date>();
     const t0Oct = Date.now();
     const nOct = await readCsvStream(csvDir, files.octopus, (r) => {
       const shop = clean(r['SHOP']);
@@ -140,10 +143,15 @@ export class EtlService {
         m.set(proc, (m.get(proc) ?? 0) + 1);
       }
       const osId = clean(r['OS_ID']);
-      if (osId && parts.has(osId) && !nameFromOct.has(osId)) {
+      if (!osId || !parts.has(osId)) return;
+      if (!nameFromOct.has(osId)) {
         const nm = clean(r['部品名称']);
         if (nm) nameFromOct.set(osId, nm);
       }
+      const jnd = parseDateTime(r['JND(計算)'] ?? r['JND'] ?? '');
+      if (!jnd) return;
+      const prev = octJndByOsId.get(osId);
+      if (!prev || jnd > prev) octJndByOsId.set(osId, jnd);
     });
     this.logger.log(`[etl] read octopus ${Date.now() - t0Oct}ms`);
 
@@ -154,9 +162,12 @@ export class EtlService {
     this.logger.log(`部品(OS_ID)数 = ${parts.size}`);
 
     const buildMeta = (osId: string, agg: Agg): PartMeta => {
-      const flexMax = () => flexMaxFromRows(agg.rows);
-      const pbsEnd = () => parsePbsMonthEnd(dueMonthByOsId.get(osId) ?? '');
-      const finalDue = resolveFinalDue(M.params.dueSource, flexMax(), pbsEnd());
+      const candidates = {
+        flexsche: flexMaxFromRows(agg.rows),
+        octopus: octJndByOsId.get(osId) ?? null,
+        pbs: parsePbsMonthEnd(dueMonthByOsId.get(osId) ?? ''),
+      };
+      const finalDue = resolveFinalDueForPart(agg.kishu, candidates, M);
       return {
         osId,
         partNo: agg.partNo,
@@ -190,11 +201,12 @@ export class EtlService {
     for (const { osId, agg, meta } of computed) {
       const finalDue = meta.finalDue;
       const pbsDue = parsePbsMonthEnd(dueMonthByOsId.get(osId) ?? '');
-      partRows.push([osId, meta.partNo, meta.name, meta.category, meta.kishu, finalDue, pbsDue, meta.urgent, meta.shortage]);
+      const octDue = octJndByOsId.get(osId) ?? null;
+      partRows.push([osId, meta.partNo, meta.name, meta.category, meta.kishu, finalDue, pbsDue, octDue, meta.urgent, meta.shortage]);
       let seqN = 0;
       for (const rr of [...agg.rows].sort((a, b) => a.seqMain - b.seqMain || a.seqSub - b.seqSub)) {
         seqN++;
-        routingRows.push([osId, seqN, rr.seqLabel, rr.shop, rr.job, rr.planStart, rr.planEnd, rr.wip, rr.materialStatus, rr.outDate, rr.inDate, rr.etaDate, rr.orderNo]);
+        routingRows.push([osId, seqN, rr.seqLabel, rr.shop, rr.job, rr.planStart, rr.planEnd, rr.wip, rr.materialStatus, rr.outDate, rr.inDate, rr.etaDate, rr.reqDueDate, rr.orderNo]);
       }
       assignRows.push([osId]);
     }
@@ -225,10 +237,10 @@ export class EtlService {
         await tx.$executeRawUnsafe('DELETE FROM t_shop_name');
         await batchInsert(tx, 't_shop_master', ['shop', 'job', 'name', 'machine'], shopMasterRows,
           'ON CONFLICT (shop,job) DO UPDATE SET name=EXCLUDED.name, machine=EXCLUDED.machine');
-        await batchInsert(tx, 't_part', ['os_id', 'part_no', 'part_name', 'category', 'kishu', 'final_due', 'pbs_due', 'urgent_flag', 'shortage_flag'], partRows);
-        await batchInsert(tx, 't_routing', ['os_id', 'seq', 'seq_label', 'shop', 'job', 'plan_start', 'plan_end', 'wip_flag', 'material_status', 'out_date', 'in_date', 'eta_date', 'order_no'], routingRows);
+        await batchInsert(tx, 't_part', ['os_id', 'part_no', 'part_name', 'category', 'kishu', 'final_due', 'pbs_due', 'oct_due', 'urgent_flag', 'shortage_flag'], partRows);
+        await batchInsert(tx, 't_routing', ['os_id', 'seq', 'seq_label', 'shop', 'job', 'plan_start', 'plan_end', 'wip_flag', 'material_status', 'out_date', 'in_date', 'eta_date', 'req_due_date', 'order_no'], routingRows);
         await batchInsert(tx, 't_part_status', ['os_id', 'part_no', 'part_name', 'category', 'kishu', 'final_due', 'total_shops', 'done_shops', 'remain_shops', 'current_shop', 'days_left', 'buffer', 'color', 'stagnant_days', 'urgent', 'shortage', 'computed_at'], statusRows);
-        await batchInsert(tx, 't_timeline', ['os_id', 'seq', 'shop', 'name', 'status', 'plan_end', 'is_milestone', 'ms_passed', 'ms_color', 'ms_due', 'gaic', 'gaic_status', 'order_no'], timelineRows);
+        await batchInsert(tx, 't_timeline', ['os_id', 'seq', 'shop', 'name', 'status', 'plan_end', 'is_milestone', 'ms_passed', 'ms_color', 'ms_due', 'gaic', 'gaic_status', 'gaic_phase', 'order_no', 'out_date', 'in_date', 'eta_date', 'req_due_date'], timelineRows);
         await batchInsert(tx, 't_assignment', ['os_id'], assignRows, 'ON CONFLICT DO NOTHING');
         await batchInsert(tx, 'm_kishu', ['kishu'], kishuRows, 'ON CONFLICT DO NOTHING');
         await batchInsert(tx, 't_shop_name', ['shop', 'name'], shopNameRows);
@@ -328,7 +340,7 @@ export class EtlService {
     const calcOpts = buildCalcOpts(M);
 
     const partRes = await this.prisma.part.findMany({
-      select: { osId: true, partNo: true, partName: true, kishu: true, pbsDue: true, urgentFlag: true, shortageFlag: true },
+      select: { osId: true, partNo: true, partName: true, kishu: true, pbsDue: true, octDue: true, urgentFlag: true, shortageFlag: true },
     });
     const routeRes = await this.prisma.routing.findMany({ orderBy: [{ osId: 'asc' }, { seq: 'asc' }] });
     const rowsByOs = new Map<string, RoutingRow[]>();
@@ -354,6 +366,7 @@ export class EtlService {
         outDate: r.outDate ?? null,
         inDate: r.inDate ?? null,
         etaDate: r.etaDate ?? null,
+        reqDueDate: r.reqDueDate ?? null,
         orderNo: r.orderNo ?? '',
       });
     }
@@ -363,7 +376,9 @@ export class EtlService {
       const rows = rowsByOs.get(osId) ?? [];
       const flexMax = flexMaxFromRows(rows);
       const pbsDue: Date | null = pr.pbsDue ? new Date(pr.pbsDue) : null;
-      const finalDue = resolveFinalDue(M.params.dueSource, flexMax, pbsDue);
+      const octDue: Date | null = pr.octDue ? new Date(pr.octDue) : null;
+      const kishu = pr.kishu ?? '';
+      const finalDue = resolveFinalDueForPart(kishu, { flexsche: flexMax, octopus: octDue, pbs: pbsDue }, M);
       const meta: PartMeta = {
         osId,
         partNo: pr.partNo ?? '',
@@ -378,20 +393,21 @@ export class EtlService {
     });
 
     const computedAt = new Date();
+    const colors = aggregateColorCounts(computed.map((c) => c.part.color));
     const { statusRows, timelineRows } = buildStatusTimelineRows(computed, asOf, computedAt);
 
     const t0 = Date.now();
     await this.prisma.$transaction(
       async (tx) => {
-        await tx.$executeRawUnsafe('DELETE FROM t_timeline');
-        await tx.$executeRawUnsafe('DELETE FROM t_part_status');
+        await tx.$executeRawUnsafe('TRUNCATE t_timeline');
+        await tx.$executeRawUnsafe('TRUNCATE t_part_status');
         await batchInsert(tx, 't_part_status', ['os_id', 'part_no', 'part_name', 'category', 'kishu', 'final_due', 'total_shops', 'done_shops', 'remain_shops', 'current_shop', 'days_left', 'buffer', 'color', 'stagnant_days', 'urgent', 'shortage', 'computed_at'], statusRows);
-        await batchInsert(tx, 't_timeline', ['os_id', 'seq', 'shop', 'name', 'status', 'plan_end', 'is_milestone', 'ms_passed', 'ms_color', 'ms_due', 'gaic', 'gaic_status', 'order_no'], timelineRows);
+        await batchInsert(tx, 't_timeline', ['os_id', 'seq', 'shop', 'name', 'status', 'plan_end', 'is_milestone', 'ms_passed', 'ms_color', 'ms_due', 'gaic', 'gaic_status', 'gaic_phase', 'order_no', 'out_date', 'in_date', 'eta_date', 'req_due_date'], timelineRows);
       },
       { timeout: 600000, maxWait: 60000 },
     );
     this.logger.log(`[recompute] total ${Date.now() - t0}ms`);
     this.logger.log(`[recompute] 完了: t_part_status=${statusRows.length} / t_timeline=${timelineRows.length}`);
-    return { parts: statusRows.length, timeline: timelineRows.length };
+    return { parts: statusRows.length, timeline: timelineRows.length, colors };
   }
 }

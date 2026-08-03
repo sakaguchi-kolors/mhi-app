@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Part, Meta } from '../types';
 import * as api from '../api';
+import type { RecomputeResult } from '../api';
 
 export const queryKeys = {
   meta: ['meta'] as const,
@@ -95,10 +96,20 @@ export function usePartMutations(toast: { show: (msg: string) => void }) {
     [mutate, patchPart],
   );
 
-  const recompute = useMutation({
+  const recomputeMutation = useMutation({
     mutationFn: api.recompute,
-    onSuccess: invalidate,
   });
+
+  const runRecompute = useCallback(
+    async (opts?: { background?: boolean }): Promise<RecomputeResult> => {
+      const result = await recomputeMutation.mutateAsync();
+      const inv = qc.invalidateQueries({ queryKey: queryKeys.parts });
+      if (opts?.background) void inv;
+      else await inv;
+      return result;
+    },
+    [qc, recomputeMutation],
+  );
 
   const autoAssign = useMutation({
     mutationFn: api.autoAssign,
@@ -111,7 +122,8 @@ export function usePartMutations(toast: { show: (msg: string) => void }) {
     onShelved,
     onMemo,
     onNote,
-    recompute,
+    recompute: recomputeMutation,
+    runRecompute,
     autoAssign,
     invalidate,
   };

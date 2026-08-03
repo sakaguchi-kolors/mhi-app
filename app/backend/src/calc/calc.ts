@@ -1,9 +1,8 @@
 // 算出ロジック（設計仕様書 2章準拠）
 // マスタ駆動：色境界・マイルストン定義・Shop別LT・稼働日カレンダーを外部から注入できる。
-// 既定引数は現状（v0.1）の挙動を再現する。
-import type { GaicStatus, Part, RoutingRow, TimelineCell } from '../common/types';
+import type { GaicPhase, GaicStatus, Part, RoutingRow, TimelineCell } from '../common/types';
 import { bufferColor } from '../shared/domain';
-import type { MilestoneRule } from '../masters/masters.util';
+import { milestoneRowKey } from '../masters/milestone-mark.util';
 
 export { bufferColor };
 
@@ -13,7 +12,10 @@ export interface CalcOptions {
   stagnantThreshold: number;
   bufGreen?: number; // 既定1
   bufYellow?: number; // 既定0
-  milestoneRules?: MilestoneRule[]; // 無ければ組込みヒューリスティック
+  /** shop::job。指定時はこちらを優先（空 Set も有効） */
+  milestoneMarks?: Set<string>;
+  /** shop::job。OCTPuS実績(outDate)と OR */
+  gaicMarks?: Set<string>;
   shopLt?: Map<string, number>; // Shop別LT上書き
   holidays?: Set<string>; // 'YYYY-MM-DD' 休日（稼働日計算）
 }
@@ -51,17 +53,10 @@ export function ymd(d: Date | null): string {
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** バッファ→色（2.3）。shared/domain.ts へ移動済み。後方互換のため re-export */
-
-/** 検査（マイルストン）Shop判定（2.4）。rules未指定時は組込みヒューリスティック */
-export function isMilestone(shop: string, name: string, rules?: MilestoneRule[]): boolean {
-  if (rules) {
-    for (const r of rules) {
-      if (r.matchType === 'name_contains' && name.includes(r.pattern)) return true;
-      if (r.matchType === 'shop' && shop === r.pattern) return true;
-      if (r.matchType === 'shop_prefix' && shop.startsWith(r.pattern)) return true;
-    }
-    return false;
+/** 検査（マイルストン）判定。marks 指定時は shop::job のみ。未指定時は組込みヒューリスティック */
+export function isMilestone(shop: string, name: string, marks?: Set<string>, job?: string): boolean {
+  if (marks !== undefined && job !== undefined) {
+    return marks.has(milestoneRowKey(shop, job));
   }
   return /検査|試験|バランステスト/.test(name) || /^7P3/.test(shop) || shop === '7P42';
 }
@@ -74,50 +69,100 @@ export function gaicStatus(hasIn: boolean, materialStatus: string, hasOut: boole
   return 'blue';
 }
 
+/** 外注工程進捗フェーズ：持出待 → 持出済 → 納入待 → 持込済 */
+export function gaicPhase(hasIn: boolean, materialStatus: string, hasOut: boolean, hasEta: boolean): GaicPhase {
+  if (hasIn) return 'in_done';
+  if (!hasOut || materialStatus !== '4_材料払出済') return 'wait_out';
+  if (!hasEta) return 'out_done';
+  return 'wait_in';
+}
+
+function pickLater(a: Date | null, b: Date | null): Date | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a > b ? a : b;
+}
+
 interface Cell {
   shop: string;
   job: string;
   planStart: Date | null;
   planEnd: Date | null;
   wip: boolean;
+  milestone: boolean;
   gaic: boolean;
   materialStatus: string;
   hasIn: boolean;
   hasOut: boolean;
   hasEta: boolean;
+  hasReq: boolean;
+  outDate: Date | null;
+  inDate: Date | null;
+  etaDate: Date | null;
+  reqDueDate: Date | null;
   orderNo: string;
 }
 
+function rowGaic(r: RoutingRow, gaicMarks?: Set<string>): boolean {
+  return !!r.outDate || (gaicMarks?.has(milestoneRowKey(r.shop, r.job)) ?? false);
+}
+
 /** 連続する同一SHOPを1コマ(Shop)に圧縮 */
-function compress(rows: RoutingRow[]): Cell[] {
+function compress(rows: RoutingRow[], opts?: { milestoneMarks?: Set<string>; gaicMarks?: Set<string> }): Cell[] {
+  const milestoneMarks = opts?.milestoneMarks;
+  const gaicMarks = opts?.gaicMarks;
   const cells: Cell[] = [];
   for (const r of rows) {
+    const key = milestoneRowKey(r.shop, r.job);
     const last = cells[cells.length - 1];
     if (last && last.shop === r.shop) {
       if (r.planStart && (!last.planStart || r.planStart < last.planStart)) last.planStart = r.planStart;
       if (r.planEnd && (!last.planEnd || r.planEnd > last.planEnd)) last.planEnd = r.planEnd;
       last.wip = last.wip || r.wip;
-      if (r.outDate) {
+      if (milestoneMarks?.has(key)) last.milestone = true;
+      if (rowGaic(r, gaicMarks)) {
         last.gaic = true;
-        last.hasOut = true;
-        last.materialStatus = r.materialStatus;
-        last.hasIn = last.hasIn || !!r.inDate;
-        last.hasEta = last.hasEta || !!r.etaDate;
-        if (r.orderNo) last.orderNo = r.orderNo;
+        if (r.outDate) {
+          last.hasOut = true;
+          last.outDate = pickLater(last.outDate, r.outDate);
+          last.materialStatus = r.materialStatus;
+          last.hasIn = last.hasIn || !!r.inDate;
+          last.inDate = pickLater(last.inDate, r.inDate);
+          last.hasEta = last.hasEta || !!r.etaDate;
+          last.etaDate = pickLater(last.etaDate, r.etaDate);
+          last.hasReq = last.hasReq || !!r.reqDueDate;
+          last.reqDueDate = pickLater(last.reqDueDate, r.reqDueDate);
+          if (r.orderNo) last.orderNo = r.orderNo;
+        } else if (r.inDate || r.etaDate || r.reqDueDate) {
+          last.hasIn = last.hasIn || !!r.inDate;
+          last.inDate = pickLater(last.inDate, r.inDate);
+          last.hasEta = last.hasEta || !!r.etaDate;
+          last.etaDate = pickLater(last.etaDate, r.etaDate);
+          last.hasReq = last.hasReq || !!r.reqDueDate;
+          last.reqDueDate = pickLater(last.reqDueDate, r.reqDueDate);
+          if (r.materialStatus) last.materialStatus = r.materialStatus;
+        }
       }
       continue;
     }
+    const gaic = rowGaic(r, gaicMarks);
     cells.push({
       shop: r.shop,
       job: r.job,
       planStart: r.planStart,
       planEnd: r.planEnd,
       wip: r.wip,
-      gaic: !!r.outDate,
+      milestone: milestoneMarks?.has(key) ?? false,
+      gaic,
       materialStatus: r.materialStatus,
       hasIn: !!r.inDate,
       hasOut: !!r.outDate,
       hasEta: !!r.etaDate,
+      hasReq: !!r.reqDueDate,
+      outDate: r.outDate,
+      inDate: r.inDate,
+      etaDate: r.etaDate,
+      reqDueDate: r.reqDueDate,
       orderNo: r.orderNo,
     });
   }
@@ -145,9 +190,10 @@ export function computePart(
   const green = o.bufGreen ?? 1;
   const yellow = o.bufYellow ?? 0;
   const ltOf = (shop: string) => o.shopLt?.get(shop) ?? o.shopLtDays;
+  const useMarks = o.milestoneMarks !== undefined;
 
   const sorted = [...rows].sort((a, b) => a.seqMain - b.seqMain || a.seqSub - b.seqSub);
-  const cells = compress(sorted);
+  const cells = compress(sorted, { milestoneMarks: o.milestoneMarks, gaicMarks: o.gaicMarks });
   const total = cells.length;
 
   const currentIdx = cells.findIndex((c) => c.wip);
@@ -156,10 +202,7 @@ export function computePart(
   const remainShops = allDone ? 0 : total - currentIdx;
 
   const finalDue = meta.finalDue;
-  // 仕様（要判断）: finalDue が null の部品は daysLeft=0 となり buffer も負になりやすく赤扱いになる。
-  // 納期不明と納期超過は現状区別されない。
   const daysLeft = finalDue ? dayDiff(finalDue, asOf, o.holidays) : 0;
-  // 残Shop所要 = 残コマのLT合計（Shop別LT上書き対応）
   let need = 0;
   if (!allDone) for (let i = currentIdx; i < total; i++) need += ltOf(cells[i].shop);
   const buffer = daysLeft - need;
@@ -174,18 +217,17 @@ export function computePart(
     const status = allDone || i < currentIdx ? 'done' : i === currentIdx ? 'current' : 'wait';
     const name = resolveName(c.shop, c.job);
     const cell: TimelineCell = { shop: c.shop, name, status, plan: mmdd(c.planEnd) };
-    if (isMilestone(c.shop, name, o.milestoneRules)) {
+    const ms =
+      useMarks ? c.milestone : isMilestone(c.shop, name, undefined, c.job);
+    if (ms) {
       cell.milestone = true;
       const passed = status === 'done';
       cell.mpassed = passed;
       if (!passed) {
-        // 仕様（要判断）: マイルストン期日の逆算は暦日ベース（86400000ms/Shop）。
-        // 残日数(daysLeft)は稼働日ベース(dayDiff)と非対称。
         const msDue = finalDue
           ? new Date(finalDue.getTime() - (total - 1 - i) * o.milestoneLtDays * 86400000)
           : null;
         cell.mdue = mmdd(msDue);
-        // 現在コマ〜当該マイルストンまでの所要（LT合計）
         let needToMs = 0;
         if (currentIdx >= 0) for (let k = currentIdx; k <= i; k++) needToMs += ltOf(cells[k].shop);
         else needToMs = ltOf(c.shop);
@@ -197,6 +239,11 @@ export function computePart(
       cell.gaic = true;
       cell.gorder = c.orderNo || undefined;
       cell.gstat = gaicStatus(c.hasIn, c.materialStatus, c.hasOut, c.hasEta);
+      cell.gphase = gaicPhase(c.hasIn, c.materialStatus, c.hasOut, c.hasEta);
+      cell.gout = mmdd(c.outDate);
+      cell.gin = mmdd(c.inDate);
+      cell.geta = mmdd(c.etaDate);
+      cell.greq = mmdd(c.reqDueDate);
     }
     return cell;
   });

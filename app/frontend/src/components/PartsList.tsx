@@ -7,9 +7,11 @@ import type { Part } from '../types';
 import { sevRank, jc } from '../util';
 import { ProgressBar } from './ProgressBar';
 import { usePartsFilter } from '../hooks/usePartsFilter';
+import { usePagedTableTransition } from '../hooks/usePagedTableTransition';
 import { PartsListKpi } from './parts/PartsListKpi';
 import { PartsListToolbar } from './parts/PartsListToolbar';
 import { MemoModal } from './shared/MemoModal';
+import { Loading } from './Loading';
 
 const PAGE_SIZES = [30, 50, 100, 500] as const;
 
@@ -30,10 +32,12 @@ interface Props {
 export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaultOwnerFilter, onAutoAssign, onOpen, onOwner, onTrouble, onShelved, onMemo }: Props) {
   const {
     filter,
+    query,
     cat,
     owner,
     kishu,
     showShelved,
+    setQuery,
     setCat,
     setOwner,
     setKishu,
@@ -50,8 +54,13 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
   const [sorting, setSorting] = useState<SortingState>([{ id: 'sev', desc: false }]);
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 30 });
   const [memoFor, setMemoFor] = useState<Part | null>(null);
+  const { busy: pageBusy, runTransition } = usePagedTableTransition();
 
-  useEffect(() => { setPagination((p) => ({ ...p, pageIndex: 0 })); }, [filter, cat, owner, kishu, showShelved]);
+  const total = filtered.length;
+  const pageIndex = pagination.pageIndex;
+  const pageSize = pagination.pageSize;
+
+  useEffect(() => { setPagination((p) => ({ ...p, pageIndex: 0 })); }, [filter, query, cat, owner, kishu, showShelved]);
 
   const columns = useMemo<ColumnDef<Part>[]>(() => [
     {
@@ -186,10 +195,7 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
     getPaginationRowModel: getPaginationRowModel(),
   });
 
-  const total = filtered.length;
   const pageCount = table.getPageCount();
-  const pageIndex = pagination.pageIndex;
-  const pageSize = pagination.pageSize;
   const from = total === 0 ? 0 : pageIndex * pageSize + 1;
   const to = Math.min((pageIndex + 1) * pageSize, total);
 
@@ -199,6 +205,7 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
       <PartsListKpi kpi={kpi} filter={filter} stagnantThreshold={stagnantThreshold} onToggle={toggleFilter} />
       <PartsListToolbar
         filter={filter}
+        query={query}
         cat={cat}
         owner={owner}
         kishu={kishu}
@@ -209,6 +216,7 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
         kishus={kishus}
         admin={admin}
         onSetFilter={setFilter}
+        onSetQuery={setQuery}
         onSetCat={setCat}
         onSetOwner={setOwner}
         onSetKishu={setKishu}
@@ -216,7 +224,8 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
         onAutoAssign={onAutoAssign}
       />
 
-      <div className="panel">
+      <div className="panel panel-loading-wrap">
+        {pageBusy && <Loading variant="veil" label="読み込み中…" />}
         <div className="table-wrap">
           <table>
             <thead>
@@ -258,16 +267,20 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
             <label className="pager-size">
               表示件数
               <select className="filter" value={pageSize}
-                onChange={(e) => table.setPageSize(Number(e.target.value))}>
+                disabled={pageBusy}
+                onChange={(e) => {
+                  const size = Number(e.target.value);
+                  runTransition(() => setPagination((p) => ({ pageIndex: 0, pageSize: size })));
+                }}>
                 {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </label>
             <div className="pager-nav">
-              <button type="button" className="chip" disabled={!table.getCanPreviousPage()}
-                onClick={() => table.previousPage()}>前へ</button>
+              <button type="button" className="chip" disabled={pageBusy || !table.getCanPreviousPage()}
+                onClick={() => runTransition(() => table.previousPage())}>前へ</button>
               <span className="pager-page">{pageIndex + 1} / {pageCount}</span>
-              <button type="button" className="chip" disabled={!table.getCanNextPage()}
-                onClick={() => table.nextPage()}>次へ</button>
+              <button type="button" className="chip" disabled={pageBusy || !table.getCanNextPage()}
+                onClick={() => runTransition(() => table.nextPage())}>次へ</button>
             </div>
           </div>
         )}

@@ -13,5 +13,6 @@ export interface RoutingRow {
   outDate: Date | null;
   inDate: Date | null;
   etaDate: Date | null;
+  reqDueDate: Date | null;
   orderNo: string;
 }

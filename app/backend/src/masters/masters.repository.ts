@@ -2,6 +2,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { milestoneRowKey, parseMilestoneRowKey } from './milestone-mark.util';
+import { DUE_SOURCE_KINDS, type DueSourceKind } from '../etl/etl-compute.util';
 import type { ColDef, MasterDef } from './masters.def';
 
 export type MasterRow = Record<string, unknown>;
@@ -12,6 +14,10 @@ const AUDIT_COLS = new Set(['created_at', 'created_by', 'updated_at', 'updated_b
 const FIELD_MAP: Record<string, string> = {
   match_type: 'matchType',
   lt_days: 'ltDays',
+  priority_1: 'priority1',
+  priority_2: 'priority2',
+  priority_3: 'priority3',
+  is_milestone: 'isMilestone',
   cal_date: 'calDate',
   is_workday: 'isWorkday',
   order_prefix: 'orderPrefix',
@@ -80,16 +86,73 @@ function orderBy(def: MasterDef): Record<string, 'asc'> {
   return { [toPrismaKey(def.pk)]: 'asc' };
 }
 
+function validateKishuDuePriority(body: MasterRow): DueSourceKind[] {
+  const p = [String(body.priority_1 ?? ''), String(body.priority_2 ?? ''), String(body.priority_3 ?? '')] as DueSourceKind[];
+  if (p.some((x) => !DUE_SOURCE_KINDS.includes(x))) {
+    throw new BadRequestException('優先順位は flexsche / octopus / pbs から選んでください');
+  }
+  if (new Set(p).size !== 3) {
+    throw new BadRequestException('優先順位は重複なく3つ指定してください');
+  }
+  return p;
+}
+
 @Injectable()
 export class MastersRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** SHOP_JOBマスタ全行 + m_milestone のフラグをマージ */
+  private async findMilestoneRows(def: MasterDef): Promise<MasterRow[]> {
+    const [shops, marks] = await Promise.all([
+      this.prisma.shopMaster.findMany({ orderBy: [{ shop: 'asc' }, { job: 'asc' }] }),
+      this.prisma.milestone.findMany(),
+    ]);
+    const markMap = new Map(marks.map((m) => [milestoneRowKey(m.shop, m.job), m]));
+    return shops.map((sm) => {
+      const shop = String(sm.shop);
+      const job = String(sm.job);
+      const key = milestoneRowKey(shop, job);
+      const m = markMap.get(key);
+      const record: Record<string, unknown> = {
+        shop,
+        job,
+        name: sm.name,
+        isMilestone: m?.isMilestone ?? false,
+        gaic: m?.gaic ?? false,
+        shop_job: key,
+        createdAt: m?.createdAt,
+        createdBy: m?.createdBy,
+        updatedAt: m?.updatedAt,
+        updatedBy: m?.updatedBy,
+      };
+      return modelToRow(def, record);
+    });
+  }
+
+  /** 全機種 + 設定済み優先順位をマージ */
+  private async findKishuDuePriorityRows(def: MasterDef): Promise<MasterRow[]> {
+    const [kishus, priorities] = await Promise.all([
+      this.prisma.kishu.findMany({ where: { active: true }, orderBy: { kishu: 'asc' } }),
+      this.prisma.kishuDuePriority.findMany(),
+    ]);
+    const pmap = new Map(priorities.map((p) => [p.kishu, p]));
+    return kishus.map((k) => {
+      const p = pmap.get(k.kishu);
+      const record: Record<string, unknown> = p
+        ? { ...p, configured: true }
+        : { kishu: k.kishu, priority1: '', priority2: '', priority3: '', configured: false };
+      return modelToRow(def, record);
+    });
+  }
 
   async findAll(def: MasterDef): Promise<MasterRow[]> {
     switch (def.name) {
       case 'param':
         return (await this.prisma.param.findMany({ orderBy: { key: 'asc' } })).map((r) => modelToRow(def, r as Record<string, unknown>));
       case 'milestone':
-        return (await this.prisma.milestone.findMany({ orderBy: { id: 'asc' } })).map((r) => modelToRow(def, r as Record<string, unknown>));
+        return this.findMilestoneRows(def);
+      case 'kishu_due_priority':
+        return this.findKishuDuePriorityRows(def);
       case 'shop_lt':
         return (await this.prisma.shopLt.findMany({ orderBy: { shop: 'asc' } })).map((r) => modelToRow(def, r as Record<string, unknown>));
       case 'calendar':
@@ -134,26 +197,50 @@ export class MastersRepository {
         return modelToRow(def, row as Record<string, unknown>);
       }
       case 'milestone': {
-        const data = buildData(def, body, user, cols) as Prisma.MilestoneUpdateInput;
-        if (def.autoId && pkVal != null && pkVal !== '') {
-          const row = await this.prisma.milestone.update({
-            where: { id: Number(pkVal) },
-            data,
-          });
-          return modelToRow(def, row as Record<string, unknown>);
+        const shop = String(body.shop ?? '');
+        const job = String(body.job ?? '');
+        if (!shop || !job) throw new BadRequestException('SHOP と JOB が必要です');
+        const isMs = body.is_milestone === true || body.is_milestone === 'true';
+        const gaic = body.gaic === true || body.gaic === 'true';
+        const key = milestoneRowKey(shop, job);
+        if (!isMs && !gaic) {
+          await this.prisma.milestone.deleteMany({ where: { shop, job } });
+          const sm = await this.prisma.shopMaster.findUnique({ where: { shop_job: { shop, job } } });
+          return {
+            shop,
+            job,
+            shop_job: key,
+            name: sm?.name ?? body.name ?? '',
+            is_milestone: false,
+            gaic: false,
+          };
         }
-        const createData = {
-          matchType: String(body.match_type ?? ''),
-          pattern: String(body.pattern ?? ''),
-          label: body.label == null ? null : String(body.label),
-          active: body.active === true || body.active === 'true',
-          createdAt: now,
-          createdBy: user,
-          updatedAt: now,
-          updatedBy: user,
+        const row = await this.prisma.milestone.upsert({
+          where: { shop_job: { shop, job } },
+          create: {
+            shop,
+            job,
+            isMilestone: isMs,
+            gaic,
+            createdAt: now,
+            createdBy: user,
+            updatedAt: now,
+            updatedBy: user,
+          },
+          update: {
+            isMilestone: isMs,
+            gaic,
+            updatedAt: now,
+            updatedBy: user,
+          },
+        });
+        const sm = await this.prisma.shopMaster.findUnique({ where: { shop_job: { shop, job } } });
+        const record: Record<string, unknown> = {
+          ...row,
+          name: sm?.name ?? body.name ?? '',
+          shop_job: key,
         };
-        const row = await this.prisma.milestone.create({ data: createData });
-        return modelToRow(def, row as Record<string, unknown>);
+        return modelToRow(def, record);
       }
       case 'shop_lt': {
         const data = buildData(def, body, user, cols) as Prisma.ShopLtUpdateInput;
@@ -210,6 +297,32 @@ export class MastersRepository {
         });
         return modelToRow(def, row as Record<string, unknown>);
       }
+      case 'kishu_due_priority': {
+        const kishu = String(body.kishu ?? pkVal ?? '');
+        if (!kishu) throw new BadRequestException('機種が必要です');
+        const [p1, p2, p3] = validateKishuDuePriority(body);
+        const row = await this.prisma.kishuDuePriority.upsert({
+          where: { kishu },
+          create: {
+            kishu,
+            priority1: p1,
+            priority2: p2,
+            priority3: p3,
+            createdAt: now,
+            createdBy: user,
+            updatedAt: now,
+            updatedBy: user,
+          },
+          update: {
+            priority1: p1,
+            priority2: p2,
+            priority3: p3,
+            updatedAt: now,
+            updatedBy: user,
+          },
+        });
+        return modelToRow(def, { ...row, configured: true } as Record<string, unknown>);
+      }
       case 'category': {
         const data = buildData(def, body, user, cols) as Prisma.CategoryUpdateInput;
         if (def.autoId && pkVal != null && pkVal !== '') {
@@ -243,9 +356,11 @@ export class MastersRepository {
       case 'param':
         await this.prisma.param.delete({ where: { key: id } });
         return;
-      case 'milestone':
-        await this.prisma.milestone.delete({ where: { id: Number(id) } });
+      case 'milestone': {
+        const { shop, job } = parseMilestoneRowKey(id);
+        await this.prisma.milestone.deleteMany({ where: { shop, job } });
         return;
+      }
       case 'shop_lt':
         await this.prisma.shopLt.delete({ where: { shop: id } });
         return;
@@ -254,6 +369,9 @@ export class MastersRepository {
         return;
       case 'vendor':
         await this.prisma.vendor.delete({ where: { orderPrefix: id } });
+        return;
+      case 'kishu_due_priority':
+        await this.prisma.kishuDuePriority.delete({ where: { kishu: id } });
         return;
       case 'category':
         await this.prisma.category.delete({ where: { id: Number(id) } });

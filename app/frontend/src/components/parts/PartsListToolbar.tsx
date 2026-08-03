@@ -2,6 +2,7 @@ import type { ChipFilter } from '../../hooks/usePartsFilter';
 
 type Props = {
   filter: ChipFilter;
+  query: string;
   cat: string;
   owner: string;
   kishu: string;
@@ -12,6 +13,7 @@ type Props = {
   kishus: string[];
   admin?: boolean;
   onSetFilter: (f: ChipFilter) => void;
+  onSetQuery: (v: string) => void;
   onSetCat: (v: string) => void;
   onSetOwner: (v: string) => void;
   onSetKishu: (v: string) => void;
@@ -21,6 +23,7 @@ type Props = {
 
 export function PartsListToolbar({
   filter,
+  query,
   cat,
   owner,
   kishu,
@@ -31,6 +34,7 @@ export function PartsListToolbar({
   kishus,
   admin,
   onSetFilter,
+  onSetQuery,
   onSetCat,
   onSetOwner,
   onSetKishu,
@@ -39,6 +43,13 @@ export function PartsListToolbar({
 }: Props) {
   return (
     <div className="toolbar">
+      <input
+        type="search"
+        className="toolbar-search"
+        placeholder="部品名称 / OS_ID で検索"
+        value={query}
+        onChange={(e) => onSetQuery(e.target.value)}
+      />
       <span className={`chip ${filter === 'all' ? 'active' : ''}`} onClick={() => onSetFilter('all')}>
         すべて
       </span>

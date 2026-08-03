@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { MasterDef, Part } from '../types';
 import * as api from '../api';
+import type { RecomputeResult } from '../api';
 import { routes } from '../routes';
 import type { ToastState } from './Toast';
 import { MasterTable } from './masters/MasterTable';
@@ -11,7 +12,9 @@ import { ShopLtEditor } from './masters/ShopLtEditor';
 import { CalendarEditor } from './masters/CalendarEditor';
 import { VendorEditor } from './masters/VendorEditor';
 import { CategoryEditor } from './masters/CategoryEditor';
+import { KishuDuePriorityEditor } from './masters/KishuDuePriorityEditor';
 import { AuditSearch, MASTER_HISTORY_TAB } from './masters/AuditSearch';
+import { Loading } from './Loading';
 import {
   type Row,
   RECOMPUTE_MASTERS,
@@ -39,8 +42,9 @@ function isValidMasterTab(name: string, defs: MasterDef[]): boolean {
 }
 
 const TAB_BLURB: Record<string, string> = {
-  param: '緊急度の色・所要日数・納期の採用元など、算出の係数を設定します。保存すると一覧に自動反映されます。',
-  milestone: 'タイムライン上で検査マイルストンとみなす工程の条件です。保存するとタイムラインに自動反映されます。',
+  param: '緊急度の色・所要日数・未設定機種向け納期デフォルトなど、算出の係数を設定します。保存すると一覧に自動反映されます。',
+  kishu_due_priority: '機種ごとに最終納期候補（小日程/OCTPuS/計画納期）の優先順位を設定します。未設定機種はパラメータのデフォルトを使います。',
+  milestone: 'SHOP_JOBマスタの工程ごとに、工程マイルストン(◎)・外注(外)をチェックで指定します。右下の「更新」で保存・反映します。',
   shop_lt: 'Shopごとの所要日数の例外設定です。未登録は既定LTを使います。保存するとバッファ等に自動反映されます。',
   calendar: '休日を登録すると、残日数計算からその日を除外します。保存すると残日数・バッファに自動反映されます。',
   vendor: '注文番号から外注先名を表示するための対応表です。保存するとタイムライン表示にすぐ反映されます。',
@@ -50,7 +54,7 @@ const TAB_BLURB: Record<string, string> = {
 
 type Props = {
   parts: Part[];
-  onRecompute: () => Promise<void>;
+  onRecompute: (opts?: { background?: boolean }) => Promise<RecomputeResult>;
   onReload?: () => Promise<void>;
   toast: ToastState;
 };
@@ -59,10 +63,13 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
   const { name: routeName } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const [defs, setDefs] = useState<MasterDef[]>([]);
+  const [defsLoading, setDefsLoading] = useState(true);
+  const [rowsLoading, setRowsLoading] = useState(false);
   const [rows, setRows] = useState<Row[]>([]);
   const [newRow, setNewRow] = useState<Row>({});
   const [applying, setApplying] = useState(false);
   const [lastApplied, setLastApplied] = useState<string | null>(() => loadLastRecompute());
+  const [bannerColors, setBannerColors] = useState<{ green: number; yellow: number; red: number } | null>(null);
   const [paramRows, setParamRows] = useState<Row[]>([]);
 
   const cur = routeName ?? '';
@@ -70,6 +77,7 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
   const def = useMemo(() => defs.find((d) => d.name === cur), [defs, cur]);
 
   useEffect(() => {
+    setDefsLoading(true);
     api
       .getMasters()
       .then((d) => {
@@ -81,7 +89,8 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
       .catch((e) => {
         console.error(e);
         toast.show('マスタ定義の取得に失敗しました');
-      });
+      })
+      .finally(() => setDefsLoading(false));
   }, [routeName, navigate, toast]);
 
   useEffect(() => {
@@ -92,11 +101,16 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
   }, [defs, routeName, navigate]);
 
   const loadRows = async (name: string, d: MasterDef[] = defs) => {
-    const r = await api.getMasterRows(name);
-    setRows(r);
-    const def2 = d.find((x) => x.name === name);
-    if (def2) setNewRow(emptyRow(def2));
-    if (name === 'param') setParamRows(r);
+    setRowsLoading(true);
+    try {
+      const r = await api.getMasterRows(name);
+      setRows(r);
+      const def2 = d.find((x) => x.name === name);
+      if (def2) setNewRow(emptyRow(def2));
+      if (name === 'param') setParamRows(r);
+    } finally {
+      setRowsLoading(false);
+    }
   };
   const ensureParamRows = async () => {
     if (paramRows.length) return paramRows;
@@ -120,14 +134,20 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
     if (RECOMPUTE_MASTERS.has(masterName)) {
       setApplying(true);
       try {
-        await onRecompute();
+        const result = await onRecompute({ background: true });
+        if (result.colors) setBannerColors(result.colors);
         const iso = new Date().toISOString();
         saveLastRecompute(iso);
         setLastApplied(iso);
         toast.show(action === 'save' ? '保存して反映しました' : '削除して反映しました');
       } catch (e) {
         console.error(e);
-        toast.show(errMsg(e, '一覧への反映に失敗しました'));
+        const detail = errMsg(e, '');
+        toast.show(
+          detail
+            ? `保存は完了しましたが、一覧への反映に失敗しました（${detail}）`
+            : '保存は完了しましたが、一覧への反映に失敗しました',
+        );
       } finally {
         setApplying(false);
       }
@@ -139,9 +159,32 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
     toast.show(action === 'save' ? '保存しました' : '削除しました');
   };
 
+  const saveBatch = async (changedRows: Row[], masterName = cur): Promise<boolean> => {
+    if (masterName === 'milestone') {
+      for (const row of changedRows) {
+        if (!str(row.shop).trim() || !str(row.job).trim()) {
+          toast.show('SHOP と JOB が不正です');
+          return false;
+        }
+      }
+    }
+    try {
+      for (const row of changedRows) {
+        await api.saveMasterRow(masterName, row);
+      }
+      if (masterName === cur) await loadRows(cur);
+      await applyAfterChange(masterName, 'save');
+      return true;
+    } catch (e) {
+      console.error(e);
+      toast.show(errMsg(e, '保存に失敗しました'));
+      return false;
+    }
+  };
+
   const save = async (row: Row, isNew: boolean, masterName = cur): Promise<boolean> => {
-    if (masterName === 'milestone' && !str(row.pattern).trim()) {
-      toast.show('パターンを入力してください');
+    if (masterName === 'milestone' && (!str(row.shop).trim() || !str(row.job).trim())) {
+      toast.show('SHOP と JOB が不正です');
       return false;
     }
     try {
@@ -183,22 +226,28 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
   const setCell = (i: number, key: string, val: unknown) =>
     setRows((prev) => prev.map((r, j) => (j === i ? { ...r, [key]: val } : r)));
 
+  const defaultDueSource = useMemo(() => {
+    const row = paramRows.find((r) => str(r.key) === 'DUE_SOURCE');
+    const v = str(row?.value);
+    return v === 'pbs' ? 'pbs' : 'flexsche';
+  }, [paramRows]);
+
   const defaultLt = useMemo(() => {
     const row = paramRows.find((r) => str(r.key) === 'SHOP_LT_DAYS');
     return num(row?.value, 4);
   }, [paramRows]);
 
-  const currentColors = useMemo(() => colorCounts(parts), [parts]);
+  const currentColors = useMemo(() => bannerColors ?? colorCounts(parts), [bannerColors, parts]);
 
-  if (!defs.length || (!isHistory && !def)) {
+  if (defsLoading || !defs.length || (!isHistory && !def)) {
     return (
-      <section>
+      <section className="panel-loading-wrap" style={{ minHeight: 200 }}>
         <div className="page-head">
           <div>
             <h2>マスタ管理</h2>
           </div>
         </div>
-        <p style={{ color: 'var(--muted)' }}>読み込み中…</p>
+        <Loading variant="veil" label="マスタ定義を読み込み中…" />
       </section>
     );
   }
@@ -214,10 +263,10 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
 
       <div className={`master-banner ${applying ? 'pending' : 'ok'}`}>
         <div>
-          <strong>{applying ? '一覧へ反映中…' : '自動反映'}</strong>
+          <strong>{applying ? '再計算中…' : '自動反映'}</strong>
           <span>
             {applying
-              ? '部品一覧を更新しています'
+              ? '全件再計算中（部品一覧はバックグラウンドで更新）'
               : `最終反映: ${fmtDateTime(lastApplied)}`}
           </span>
         </div>
@@ -252,18 +301,24 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
         </button>
       </div>
 
-      <div className="panel">
+      <div className="panel panel-loading-wrap">
         <p className="mnote">{TAB_BLURB[cur] ?? def?.note}</p>
+        {rowsLoading && (
+          <Loading variant="veil" label="マスタデータを読み込み中…" />
+        )}
         {isHistory && <AuditSearch defs={defs} toast={toast} />}
         {cur === 'param' && (
           <ParamEditor rows={rows} parts={parts} onSave={(row) => save(row, false, 'param')} />
         )}
         {cur === 'milestone' && (
-          <MilestoneEditor
+          <MilestoneEditor rows={rows} onSaveBatch={(changedRows) => saveBatch(changedRows)} />
+        )}
+        {cur === 'kishu_due_priority' && (
+          <KishuDuePriorityEditor
             rows={rows}
-            parts={parts}
+            defaultDueSource={defaultDueSource}
             onSave={(row, isNew) => save(row, isNew)}
-            onDelete={(id) => del(id)}
+            onDelete={(kishu) => del(kishu, 'kishu_due_priority')}
           />
         )}
         {cur === 'shop_lt' && (
@@ -295,7 +350,7 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
           />
         )}
         {!isHistory &&
-          !['param', 'milestone', 'shop_lt', 'calendar', 'vendor', 'category'].includes(cur) &&
+          !['param', 'kishu_due_priority', 'milestone', 'shop_lt', 'calendar', 'vendor', 'category'].includes(cur) &&
           def && (
             <MasterTable
               def={def}

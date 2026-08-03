@@ -12,6 +12,7 @@ export function usePartsFilter(parts: Part[], stagnantThreshold: number, default
   // 機種フィルタのみ localStorage に永続化（よく使う絞り込みを再訪問時も維持するため）
   const [kishu, setKishu] = useState(() => localStorage.getItem('mop_kishu') ?? 'all');
   const [showShelved, setShowShelved] = useState(false);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     localStorage.setItem('mop_kishu', kishu);
@@ -20,8 +21,8 @@ export function usePartsFilter(parts: Part[], stagnantThreshold: number, default
   const toggleFilter = (next: ChipFilter) => setFilter((cur) => (cur === next ? 'all' : next));
 
   const filterState = useMemo(
-    () => ({ filter, cat, kishu, owner, showShelved, stagnantThreshold }),
-    [filter, cat, kishu, owner, showShelved, stagnantThreshold],
+    () => ({ filter, cat, kishu, owner, query, showShelved, stagnantThreshold }),
+    [filter, cat, kishu, owner, query, showShelved, stagnantThreshold],
   );
 
   const match = useCallback(
@@ -48,7 +49,9 @@ export function usePartsFilter(parts: Part[], stagnantThreshold: number, default
     cat,
     owner,
     kishu,
+    query,
     showShelved,
+    setQuery,
     setCat,
     setOwner,
     setKishu,

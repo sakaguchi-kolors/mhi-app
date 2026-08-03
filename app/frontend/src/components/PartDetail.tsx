@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Part } from '../types';
 import { jc } from '../util';
-
-const gmap: Record<string, [string, string]> = {
-  blue: ['gaic', '外注・順調/クリア'], yellow: ['gwait', '外注・要確認'], red: ['gred', '外注・払出待ち'],
-};
+import { GaicBadges } from './GaicBadges';
 
 export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: { part: Part; stagnantThreshold?: number; onBack: () => void; onNote: (id: string, note: string) => void }) {
   const [note, setNote] = useState(p.note ?? '');
@@ -31,10 +28,9 @@ export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: 
       <div className="detail-grid">
         <div className="panel">
           <h3 className="pt">工程タイムライン（Shop単位）</h3>
-          <p className="pt-sub">完了／仕掛中／待ちと計画完了日。▲＝これから通る検査、✓＝通過済み検査。</p>
+          <p className="pt-sub">完了／仕掛中／待ちと計画完了日。▲＝これから通る検査、✓＝通過済み検査。外注工程は進捗フェーズと納期情報を表示。</p>
           <div className="tl">
             {p.timeline.map((t, i) => {
-              const g = t.gaic && t.gstat ? gmap[t.gstat] : null;
               return (
                 <div key={i} className={`tl-item ${t.status}`}>
                   <div className="tl-node" />
@@ -43,7 +39,8 @@ export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: 
                     {t.milestone && (t.mpassed
                       ? <span className="ms-tag passed">✓検査 通過済</span>
                       : <span className={`ms-tag ${t.mcolor ?? ''}`}>▼検査{t.mdue ? ` 期日${t.mdue}` : ''}</span>)}
-                    {g && <span className={`ms-tag ${g[0]}`}>{g[1]}{t.gvendor ? '：' + t.gvendor : ''}</span>}
+                    {t.gaic && <GaicBadges t={t} />}
+                    {t.gvendor && <span className="gaic-vendor">{t.gvendor}</span>}
                     <div className="tl-shop">Shop {t.shop}</div>
                   </div>
                   <div className="tl-right">

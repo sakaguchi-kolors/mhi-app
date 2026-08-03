@@ -12,7 +12,9 @@ import {
 import type { Part } from '../types';
 import { jc } from '../util';
 import { useTroublesFilter, troubleUrgency, troubleUrgencyLabel } from '../hooks/useTroublesFilter';
+import { usePagedTableTransition } from '../hooks/usePagedTableTransition';
 import { MemoModal } from './shared/MemoModal';
+import { Loading } from './Loading';
 import { TroublesKpi } from './troubles/TroublesKpi';
 import { TroublesToolbar } from './troubles/TroublesToolbar';
 
@@ -48,6 +50,9 @@ export function TroublesDashboard({ parts, defaultOwnerFilter, onOpen, onTrouble
   const [sorting, setSorting] = useState<SortingState>([{ id: 'troubleDays', desc: true }]);
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 30 });
   const [memoFor, setMemoFor] = useState<Part | null>(null);
+  const pageIndex = pagination.pageIndex;
+  const pageSize = pagination.pageSize;
+  const { busy: pageBusy, runTransition } = usePagedTableTransition();
 
   useEffect(() => {
     setPagination((p) => ({ ...p, pageIndex: 0 }));
@@ -184,8 +189,6 @@ export function TroublesDashboard({ parts, defaultOwnerFilter, onOpen, onTrouble
 
   const total = filtered.length;
   const pageCount = table.getPageCount();
-  const pageIndex = pagination.pageIndex;
-  const pageSize = pagination.pageSize;
   const from = total === 0 ? 0 : pageIndex * pageSize + 1;
   const to = Math.min((pageIndex + 1) * pageSize, total);
 
@@ -229,7 +232,8 @@ export function TroublesDashboard({ parts, defaultOwnerFilter, onOpen, onTrouble
         onKishuChange={setKishu}
       />
 
-      <div className="panel">
+      <div className="panel panel-loading-wrap">
+        {pageBusy && <Loading variant="veil" label="読み込み中…" />}
         <div className="table-wrap">
           <table className="trouble-table">
             <thead>
@@ -284,7 +288,11 @@ export function TroublesDashboard({ parts, defaultOwnerFilter, onOpen, onTrouble
             </span>
             <label className="pager-size">
               表示件数
-              <select className="filter" value={pageSize} onChange={(e) => table.setPageSize(Number(e.target.value))}>
+              <select className="filter" value={pageSize} disabled={pageBusy}
+                onChange={(e) => {
+                  const size = Number(e.target.value);
+                  runTransition(() => setPagination((p) => ({ pageIndex: 0, pageSize: size })));
+                }}>
                 {PAGE_SIZES.map((n) => (
                   <option key={n} value={n}>
                     {n}
@@ -293,13 +301,15 @@ export function TroublesDashboard({ parts, defaultOwnerFilter, onOpen, onTrouble
               </select>
             </label>
             <div className="pager-nav">
-              <button type="button" className="chip" disabled={!table.getCanPreviousPage()} onClick={() => table.previousPage()}>
+              <button type="button" className="chip" disabled={pageBusy || !table.getCanPreviousPage()}
+                onClick={() => runTransition(() => table.previousPage())}>
                 前へ
               </button>
               <span className="pager-page">
                 {pageIndex + 1} / {pageCount}
               </span>
-              <button type="button" className="chip" disabled={!table.getCanNextPage()} onClick={() => table.nextPage()}>
+              <button type="button" className="chip" disabled={pageBusy || !table.getCanNextPage()}
+                onClick={() => runTransition(() => table.nextPage())}>
                 次へ
               </button>
             </div>

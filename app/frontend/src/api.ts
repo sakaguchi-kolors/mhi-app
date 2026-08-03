@@ -74,7 +74,10 @@ export const getMasterRows = (name: string) => get<Record<string, unknown>[]>(`/
 export const saveMasterRow = (name: string, row: Record<string, unknown>) => post(`/api/masters/${encodeURIComponent(name)}`, row);
 export const deleteMasterRow = (name: string, id: string) =>
   fetch(`/api/masters/${encodeURIComponent(name)}/${encodeURIComponent(id)}`, withCreds({ method: 'DELETE' })).then(j);
-export const recompute = () => post<{ parts: number; timeline: number }>('/api/recompute', {});
+export const recompute = () =>
+  post<{ parts: number; timeline: number; colors: { green: number; yellow: number; red: number } }>('/api/recompute', {});
+
+export type RecomputeResult = Awaited<ReturnType<typeof recompute>>;
 export const getAudit = () => get<AuditRow[]>('/api/audit');
 
 export interface AuditSearchParams {

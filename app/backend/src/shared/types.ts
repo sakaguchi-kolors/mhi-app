@@ -11,6 +11,8 @@ export interface PublicUser {
 export type Color = 'red' | 'yellow' | 'green';
 export type CellStatus = 'done' | 'current' | 'wait';
 export type GaicStatus = 'blue' | 'yellow' | 'red';
+/** 外注工程の進捗フェーズ */
+export type GaicPhase = 'wait_out' | 'out_done' | 'wait_in' | 'in_done';
 
 export interface TimelineCell {
   shop: string;
@@ -25,6 +27,16 @@ export interface TimelineCell {
   gorder?: string;
   gstat?: GaicStatus;
   gvendor?: string;
+  /** 外注-持出待 / 持出済 / 納入待 / 持込済 */
+  gphase?: GaicPhase;
+  /** 外注持出日 MM/DD */
+  gout?: string;
+  /** 外注持込日 MM/DD */
+  gin?: string;
+  /** 納入予定日 MM/DD */
+  geta?: string;
+  /** 希望納期 MM/DD */
+  greq?: string;
 }
 
 export interface Part {
