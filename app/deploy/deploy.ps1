@@ -80,6 +80,13 @@ if (-not (Test-Path $envFile)) {
 
 $apiPort = Get-EnvValue $envFile 'API_PORT' '8787'
 
+if (Test-ServiceExists $ServiceName) {
+  Invoke-DeployStep "Stopping Windows Service ($ServiceName)" {
+    Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+  }
+}
+
 Invoke-DeployStep 'backend: npm ci && build' {
   Push-Location $backend
   Invoke-Native { npm ci }
@@ -93,13 +100,6 @@ Invoke-DeployStep 'frontend: npm ci && build' {
   Invoke-Native { npm ci }
   Invoke-Native { npm run build }
   Pop-Location
-}
-
-if (Test-ServiceExists $ServiceName) {
-  Invoke-DeployStep "Stopping Windows Service ($ServiceName)" {
-    Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
-  }
 }
 
 Invoke-DeployStep 'backend: prisma migrate deploy' {
