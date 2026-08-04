@@ -37,12 +37,14 @@ describe('masters.repository modelToRow', () => {
       shop: '7P31',
       job: '001',
       name: '検査',
+      source: 'flexsche',
       isMilestone: true,
       gaic: false,
       shop_job: '7P31::001',
     });
     expect(row.shop).toBe('7P31');
     expect(row.job).toBe('001');
+    expect(row.source).toBe('flexsche');
     expect(row.is_milestone).toBe(true);
     expect(row.gaic).toBe(false);
     expect(row.shop_job).toBe('7P31::001');

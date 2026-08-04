@@ -3,7 +3,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { milestoneRowKey, parseMilestoneRowKey } from './milestone-mark.util';
-import { DUE_SOURCE_KINDS, type DueSourceKind } from '../etl/etl-compute.util';
+import { DUE_SOURCE_KINDS, isDefaultKishuDuePriority, parseDefaultKishuDuePriority, type DueSourceKind } from '../etl/etl-compute.util';
 import type { ColDef, MasterDef } from './masters.def';
 
 export type MasterRow = Record<string, unknown>;
@@ -117,6 +117,7 @@ export class MastersRepository {
         shop,
         job,
         name: sm.name,
+        source: sm.source ?? 'shop_job',
         isMilestone: m?.isMilestone ?? false,
         gaic: m?.gaic ?? false,
         shop_job: key,
@@ -129,20 +130,44 @@ export class MastersRepository {
     });
   }
 
-  /** 全機種 + 設定済み優先順位をマージ */
+  /** 全機種 + 優先順位（標準は m_param、個別のみ m_kishu_due_priority に保持） */
   private async findKishuDuePriorityRows(def: MasterDef): Promise<MasterRow[]> {
-    const [kishus, priorities] = await Promise.all([
+    const [kishus, priorities, params] = await Promise.all([
       this.prisma.kishu.findMany({ where: { active: true }, orderBy: { kishu: 'asc' } }),
       this.prisma.kishuDuePriority.findMany(),
+      this.prisma.param.findMany({ where: { key: { startsWith: 'KISHU_DUE_PRIORITY_' } }, select: { key: true, value: true } }),
     ]);
-    const pmap = new Map(priorities.map((p) => [p.kishu, p]));
+    const pmap = new Map(params.map((p) => [p.key, p.value]));
+    const defaultPriority = parseDefaultKishuDuePriority(pmap);
+    const customMap = new Map(priorities.map((p) => [p.kishu, p]));
     return kishus.map((k) => {
-      const p = pmap.get(k.kishu);
-      const record: Record<string, unknown> = p
-        ? { ...p, configured: true }
-        : { kishu: k.kishu, priority1: '', priority2: '', priority3: '', configured: false };
+      const custom = customMap.get(k.kishu);
+      const priority = custom
+        ? ([custom.priority1, custom.priority2, custom.priority3] as DueSourceKind[])
+        : defaultPriority;
+      const record: Record<string, unknown> = {
+        kishu: k.kishu,
+        mode: custom ? 'custom' : 'default',
+        priority1: priority[0],
+        priority2: priority[1],
+        priority3: priority[2],
+      };
+      if (custom) {
+        record.createdAt = custom.createdAt;
+        record.createdBy = custom.createdBy;
+        record.updatedAt = custom.updatedAt;
+        record.updatedBy = custom.updatedBy;
+      }
       return modelToRow(def, record);
     });
+  }
+
+  private async loadDefaultKishuDuePriority(): Promise<DueSourceKind[]> {
+    const params = await this.prisma.param.findMany({
+      where: { key: { startsWith: 'KISHU_DUE_PRIORITY_' } },
+      select: { key: true, value: true },
+    });
+    return parseDefaultKishuDuePriority(new Map(params.map((p) => [p.key, p.value])));
   }
 
   async findAll(def: MasterDef): Promise<MasterRow[]> {
@@ -300,7 +325,29 @@ export class MastersRepository {
       case 'kishu_due_priority': {
         const kishu = String(body.kishu ?? pkVal ?? '');
         if (!kishu) throw new BadRequestException('機種が必要です');
+        const mode = String(body.mode ?? 'custom');
+        const defaultPriority = await this.loadDefaultKishuDuePriority();
+        if (mode === 'default') {
+          await this.prisma.kishuDuePriority.deleteMany({ where: { kishu } });
+          return modelToRow(def, {
+            kishu,
+            mode: 'default',
+            priority1: defaultPriority[0],
+            priority2: defaultPriority[1],
+            priority3: defaultPriority[2],
+          });
+        }
         const [p1, p2, p3] = validateKishuDuePriority(body);
+        if (isDefaultKishuDuePriority([p1, p2, p3], defaultPriority)) {
+          await this.prisma.kishuDuePriority.deleteMany({ where: { kishu } });
+          return modelToRow(def, {
+            kishu,
+            mode: 'default',
+            priority1: defaultPriority[0],
+            priority2: defaultPriority[1],
+            priority3: defaultPriority[2],
+          });
+        }
         const row = await this.prisma.kishuDuePriority.upsert({
           where: { kishu },
           create: {
@@ -321,7 +368,7 @@ export class MastersRepository {
             updatedBy: user,
           },
         });
-        return modelToRow(def, { ...row, configured: true } as Record<string, unknown>);
+        return modelToRow(def, { ...row, mode: 'custom' } as Record<string, unknown>);
       }
       case 'category': {
         const data = buildData(def, body, user, cols) as Prisma.CategoryUpdateInput;
@@ -371,7 +418,7 @@ export class MastersRepository {
         await this.prisma.vendor.delete({ where: { orderPrefix: id } });
         return;
       case 'kishu_due_priority':
-        await this.prisma.kishuDuePriority.delete({ where: { kishu: id } });
+        await this.prisma.kishuDuePriority.deleteMany({ where: { kishu: id } });
         return;
       case 'category':
         await this.prisma.category.delete({ where: { id: Number(id) } });

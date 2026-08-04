@@ -8,4 +8,9 @@
     --info:#2d6cdf; --info-bg:#eaf1ff;
     --done:#8fa4c4; --wait:#e2e8f2;
     --shadow:0 10px 25px rgba(31,42,68,.08); --radius:16px;
+    /* 画面内に収める: topbar + main余白 + panel余白 + pager */
+    --topbar-h:3.5rem;
+    --main-pad-y:2.75rem;
+    --panel-chrome-h:5rem;
+    --table-scroll-max-h:calc(100dvh - var(--topbar-h) - var(--main-pad-y) - var(--panel-chrome-h));
   }

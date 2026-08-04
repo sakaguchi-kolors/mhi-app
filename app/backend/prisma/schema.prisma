@@ -68,6 +68,7 @@ model ShopMaster {
   job     String
   name    String?
   machine String?
+  source  String  @default("shop_job") // shop_job | flexsche
 
   @@id([shop, job])
   @@map("t_shop_master")
@@ -267,7 +268,7 @@ model Kishu {
   @@map("m_kishu")
 }
 
-// 機種別・最終納期候補の優先順位（flexsche / octopus / pbs）。未設定機種は m_param.DUE_SOURCE を使用。
+// 機種別・最終納期候補の優先順位（flexsche / octopus / pbs）。未設定機種は PBS → 小日程 → OCTPuS。
 model KishuDuePriority {
   kishu     String   @id
   priority1 String   @map("priority_1") // flexsche | octopus | pbs

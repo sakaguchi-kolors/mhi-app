@@ -18,15 +18,13 @@ export class MetaService {
       orderBy: { displayName: 'asc' },
       select: { displayName: true },
     });
-    const [ds, st] = await Promise.all([
-      this.prisma.param.findUnique({ where: { key: 'DUE_SOURCE' }, select: { value: true } }),
+    const [st] = await Promise.all([
       this.prisma.param.findUnique({ where: { key: 'STAGNANT_THRESHOLD' }, select: { value: true } }),
     ]);
     const stagnantThreshold = Number(st?.value ?? this.config.stagnantThreshold);
     return {
       asOf: await this.asOf.getEffective(),
       owners: ['未割当', ...users.map((u) => u.displayName)],
-      dueSource: ds?.value ?? this.config.dueSource,
       stagnantThreshold: Number.isFinite(stagnantThreshold) ? stagnantThreshold : 10,
     };
   }

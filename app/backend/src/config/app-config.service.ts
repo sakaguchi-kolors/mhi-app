@@ -26,7 +26,6 @@ export class AppConfigService {
   readonly shopLtDays = num('SHOP_LT_DAYS', 4);
   readonly milestoneLtDays = num('MILESTONE_LT_DAYS', 5);
   readonly stagnantThreshold = num('STAGNANT_THRESHOLD', 10);
-  readonly dueSource = env('DUE_SOURCE', 'flexsche') as 'flexsche' | 'pbs';
   readonly apiPort = num('API_PORT', 8787);
 
   /** 取込ジョブ状態ファイル */

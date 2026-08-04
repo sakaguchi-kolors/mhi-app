@@ -90,7 +90,6 @@ export interface MasterDef {
 export interface Meta {
   asOf: string;
   owners: string[];
-  dueSource: string;
   stagnantThreshold: number;
 }
 

@@ -13,7 +13,7 @@ export const MASTERS: MasterDef[] = [
     group: 'edit',
     pk: 'key',
     autoId: false,
-    note: '緊急度の色・所要日数・納期の採用元など。保存すると一覧に自動反映されます。',
+    note: '緊急度の色・所要日数など。保存すると一覧に自動反映されます。',
     columns: [
       { key: 'key', label: 'キー', type: 'text', readonly: true },
       { key: 'value', label: '値', type: 'text', required: true },
@@ -27,11 +27,12 @@ export const MASTERS: MasterDef[] = [
     group: 'edit',
     pk: 'shop_job',
     autoId: false,
-    note: 'SHOP_JOBマスタの工程ごとに、工程マイルストン(◎)・外注(外)をチェックで指定します。保存するとタイムラインに自動反映されます。',
+    note: 'SHOP_JOBマスタを基本とし、FLEXSCHEにのみ存在する工程は取込時に自動補完されます。工程マイルストン(◎)・外注(外)をチェックで指定します。保存するとタイムラインに自動反映されます。',
     columns: [
       { key: 'shop', label: 'SHOP', type: 'text', readonly: true },
       { key: 'job', label: 'JOB', type: 'text', readonly: true },
       { key: 'name', label: '作業名称', type: 'text', readonly: true },
+      { key: 'source', label: '取得元', type: 'text', readonly: true },
       { key: 'is_milestone', label: '工程マイルストン', type: 'bool' },
       { key: 'gaic', label: '外注', type: 'bool' },
     ],
@@ -43,9 +44,10 @@ export const MASTERS: MasterDef[] = [
     group: 'edit',
     pk: 'kishu',
     autoId: false,
-    note: '機種ごとに最終納期候補（小日程/OCTPuS/計画納期）の優先順位を設定します。未設定の機種はパラメータの「最終納期の採用元」を使います。',
+    note: '標準の優先順位を設定し、必要な機種のみ個別設定します。標準に合わせる機種は標準変更に自動で追随します。',
     columns: [
       { key: 'kishu', label: '機種', type: 'text', readonly: true },
+      { key: 'mode', label: '設定', type: 'select', options: ['default', 'custom'] },
       { key: 'priority_1', label: '第1優先', type: 'select', options: ['flexsche', 'octopus', 'pbs'] },
       { key: 'priority_2', label: '第2優先', type: 'select', options: ['flexsche', 'octopus', 'pbs'] },
       { key: 'priority_3', label: '第3優先', type: 'select', options: ['flexsche', 'octopus', 'pbs'] },
@@ -120,7 +122,9 @@ export const DEFAULT_PARAMS: { key: string; value: string; description: string }
   { key: 'STAGNANT_THRESHOLD', value: '10', description: 'レッドフラッグの滞留日数閾値' },
   { key: 'BUFFER_GREEN', value: '1', description: 'バッファがこの値以上で緑' },
   { key: 'BUFFER_YELLOW', value: '0', description: 'バッファがこの値以上（緑未満）で黄。未満は赤' },
-  { key: 'DUE_SOURCE', value: 'flexsche', description: '未設定機種向けの最終納期採用元 flexsche/pbs（2択+欠損フォールバック）' },
+  { key: 'KISHU_DUE_PRIORITY_1', value: 'pbs', description: '機種別納期優先順位（標準・第1優先）' },
+  { key: 'KISHU_DUE_PRIORITY_2', value: 'flexsche', description: '機種別納期優先順位（標準・第2優先）' },
+  { key: 'KISHU_DUE_PRIORITY_3', value: 'octopus', description: '機種別納期優先順位（標準・第3優先）' },
 ];
 
 export const DEFAULT_MILESTONES: { match_type: string; pattern: string; label: string }[] = [

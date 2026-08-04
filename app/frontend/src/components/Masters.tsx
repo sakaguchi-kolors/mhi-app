@@ -42,9 +42,9 @@ function isValidMasterTab(name: string, defs: MasterDef[]): boolean {
 }
 
 const TAB_BLURB: Record<string, string> = {
-  param: '緊急度の色・所要日数・未設定機種向け納期デフォルトなど、算出の係数を設定します。保存すると一覧に自動反映されます。',
-  kishu_due_priority: '機種ごとに最終納期候補（小日程/OCTPuS/計画納期）の優先順位を設定します。未設定機種はパラメータのデフォルトを使います。',
-  milestone: 'SHOP_JOBマスタの工程ごとに、工程マイルストン(◎)・外注(外)をチェックで指定します。右下の「更新」で保存・反映します。',
+  param: '緊急度の色・所要日数など、算出の係数を設定します。保存すると一覧に自動反映されます。',
+  kishu_due_priority: '標準の優先順位を設定し、必要な機種のみ個別設定します。標準に合わせる機種は標準変更に自動で追随します。',
+  milestone: 'SHOP_JOBマスタを基本とし、FLEXSCHEにのみ存在する工程は取込時に自動補完されます。工程マイルストン(◎)・外注(外)をチェックで指定します。右下の「更新」で保存・反映します。',
   shop_lt: 'Shopごとの所要日数の例外設定です。未登録は既定LTを使います。保存するとバッファ等に自動反映されます。',
   calendar: '休日を登録すると、残日数計算からその日を除外します。保存すると残日数・バッファに自動反映されます。',
   vendor: '注文番号から外注先名を表示するための対応表です。保存するとタイムライン表示にすぐ反映されます。',
@@ -159,6 +159,28 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
     toast.show(action === 'save' ? '保存しました' : '削除しました');
   };
 
+  const saveDefaultDuePriority = async (p1: string, p2: string, p3: string): Promise<boolean> => {
+    try {
+      for (const [key, value] of [
+        ['KISHU_DUE_PRIORITY_1', p1],
+        ['KISHU_DUE_PRIORITY_2', p2],
+        ['KISHU_DUE_PRIORITY_3', p3],
+      ] as const) {
+        const existing = paramRows.find((r) => str(r.key) === key);
+        await api.saveMasterRow('param', { key, value, description: str(existing?.description) });
+      }
+      const r = await api.getMasterRows('param');
+      setParamRows(r);
+      if (cur === 'kishu_due_priority') await loadRows(cur);
+      await applyAfterChange('param', 'save');
+      return true;
+    } catch (e) {
+      console.error(e);
+      toast.show(errMsg(e, '標準の保存に失敗しました'));
+      return false;
+    }
+  };
+
   const saveBatch = async (changedRows: Row[], masterName = cur): Promise<boolean> => {
     if (masterName === 'milestone') {
       for (const row of changedRows) {
@@ -225,12 +247,6 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
 
   const setCell = (i: number, key: string, val: unknown) =>
     setRows((prev) => prev.map((r, j) => (j === i ? { ...r, [key]: val } : r)));
-
-  const defaultDueSource = useMemo(() => {
-    const row = paramRows.find((r) => str(r.key) === 'DUE_SOURCE');
-    const v = str(row?.value);
-    return v === 'pbs' ? 'pbs' : 'flexsche';
-  }, [paramRows]);
 
   const defaultLt = useMemo(() => {
     const row = paramRows.find((r) => str(r.key) === 'SHOP_LT_DAYS');
@@ -316,9 +332,9 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
         {cur === 'kishu_due_priority' && (
           <KishuDuePriorityEditor
             rows={rows}
-            defaultDueSource={defaultDueSource}
+            paramRows={paramRows}
             onSave={(row, isNew) => save(row, isNew)}
-            onDelete={(kishu) => del(kishu, 'kishu_due_priority')}
+            onSaveDefault={saveDefaultDuePriority}
           />
         )}
         {cur === 'shop_lt' && (

@@ -10,7 +10,13 @@ export interface EtlSummary {
   colors?: ColorCounts;
 }
 
-export type ShopMasterRow = { shop: string; job: string; name: string | null; machine: string | null };
+export type ShopMasterRow = {
+  shop: string;
+  job: string;
+  name: string | null;
+  machine: string | null;
+  source: 'shop_job' | 'flexsche';
+};
 
 export interface Agg {
   partNo: string;

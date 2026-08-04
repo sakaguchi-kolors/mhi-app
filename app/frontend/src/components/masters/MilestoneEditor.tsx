@@ -18,6 +18,10 @@ function rowFlags(row: Row): Flags {
   return { is_milestone: bool(row.is_milestone), gaic: bool(row.gaic) };
 }
 
+function sourceLabel(source: unknown): string {
+  return String(source) === 'flexsche' ? 'FLEXSCHE' : 'SHOP_JOB';
+}
+
 export function MilestoneEditor({ rows, onSaveBatch }: Props) {
   const [filter, setFilter] = useState('');
   const [draft, setDraft] = useState<Record<string, Flags>>({});
@@ -37,7 +41,7 @@ export function MilestoneEditor({ rows, onSaveBatch }: Props) {
     });
     if (!q) return sorted;
     return sorted.filter((r) => {
-      const hay = `${str(r.shop)} ${str(r.job)} ${str(r.name)}`.toLowerCase();
+      const hay = `${str(r.shop)} ${str(r.job)} ${str(r.name)} ${sourceLabel(r.source)}`.toLowerCase();
       return hay.includes(q);
     });
   }, [rows, filter]);
@@ -58,12 +62,14 @@ export function MilestoneEditor({ rows, onSaveBatch }: Props) {
   const counts = useMemo(() => {
     let ms = 0;
     let gaic = 0;
+    let flexsche = 0;
     for (const r of rows) {
       const f = resolveFlags(r);
       if (f.is_milestone) ms++;
       if (f.gaic) gaic++;
+      if (String(r.source) === 'flexsche') flexsche++;
     }
-    return { total: rows.length, ms, gaic };
+    return { total: rows.length, ms, gaic, flexsche };
   }, [rows, draft]);
 
   const toggle = (row: Row, key: 'is_milestone' | 'gaic', on: boolean) => {
@@ -114,7 +120,8 @@ export function MilestoneEditor({ rows, onSaveBatch }: Props) {
       <div className="master-card">
         <h4>工程マイルストン・外注の指定</h4>
         <p className="mnote">
-          SHOP_JOBマスタ（CSV取込）の工程一覧です。チェックを付けた行がタイムライン上で ◎（工程マイルストン）または 外（外注）として表示されます。
+          SHOP_JOBマスタ（CSV取込）を基本とし、FLEXSCHEにのみ存在する工程は取込時に自動補完されます。
+          チェックを付けた行がタイムライン上で ◎（工程マイルストン）または 外（外注）として表示されます。
         </p>
         <p className="param-effect">
           チェックを付けたあと、右下の「更新」で保存・反映します。反映後、部品詳細タイムラインの ◎ / 外 判定・検査期日（mdue）・外注ステータス色が変わります。
@@ -127,6 +134,8 @@ export function MilestoneEditor({ rows, onSaveBatch }: Props) {
             <span className="pill green">{counts.ms}</span>
             <span>外注</span>
             <span className="pill green">{counts.gaic}</span>
+            <span>FLEXSCHE補完</span>
+            <span className="pill yellow">{counts.flexsche}</span>
             {dirtyIds.size > 0 && (
               <span className="param-delta">未保存 {dirtyIds.size} 行</span>
             )}
@@ -135,7 +144,7 @@ export function MilestoneEditor({ rows, onSaveBatch }: Props) {
             <input
               type="search"
               className="milestone-filter"
-              placeholder="SHOP / JOB / 作業名称で絞り込み"
+              placeholder="SHOP / JOB / 作業名称 / 取得元で絞り込み"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
             />
@@ -151,7 +160,7 @@ export function MilestoneEditor({ rows, onSaveBatch }: Props) {
       {rows.length === 0 ? (
         <div className="master-card">
           <p className="mnote">
-            SHOP_JOBマスタが未取込です。データ取込で <b>SHOP_JOBマスタ.csv</b> を取り込むと、ここに工程一覧が表示されます。
+            SHOP_JOBマスタが未取込です。データ取込で <b>SHOP_JOBマスタ.csv</b> と <b>FLEXSCHE</b> を取り込むと、ここに工程一覧が表示されます（FLEXSCHEのみの工程も自動補完されます）。
           </p>
         </div>
       ) : (
@@ -163,6 +172,7 @@ export function MilestoneEditor({ rows, onSaveBatch }: Props) {
                   <th className="sticky-col">SHOP</th>
                   <th>JOB</th>
                   <th>作業名称</th>
+                  <th className="mcol">取得元</th>
                   <th className="mcol" title="工程マイルストン（◎）">
                     工程MS
                   </th>
@@ -182,6 +192,11 @@ export function MilestoneEditor({ rows, onSaveBatch }: Props) {
                       <td className="sticky-col">{str(row.shop)}</td>
                       <td>{str(row.job)}</td>
                       <td>{str(row.name) || '—'}</td>
+                      <td className="mcell">
+                        <span className={`source-tag ${String(row.source) === 'flexsche' ? 'flexsche' : 'shop-job'}`}>
+                          {sourceLabel(row.source)}
+                        </span>
+                      </td>
                       <td className="mcell">
                         <input
                           type="checkbox"

@@ -22,6 +22,35 @@ export type DueSourceKind = 'flexsche' | 'octopus' | 'pbs';
 
 export const DUE_SOURCE_KINDS: DueSourceKind[] = ['flexsche', 'octopus', 'pbs'];
 
+/** 機種別納期優先順位の標準（PBS → 小日程 → OCTPuS）。m_param 未設定時のフォールバック */
+export const DEFAULT_KISHU_DUE_PRIORITY: DueSourceKind[] = ['pbs', 'flexsche', 'octopus'];
+
+export const KISHU_DUE_PRIORITY_PARAM_KEYS = [
+  'KISHU_DUE_PRIORITY_1',
+  'KISHU_DUE_PRIORITY_2',
+  'KISHU_DUE_PRIORITY_3',
+] as const;
+
+export function parseDefaultKishuDuePriority(pmap: Map<string, string>): DueSourceKind[] {
+  const p = KISHU_DUE_PRIORITY_PARAM_KEYS.map((k, i) => {
+    const v = pmap.get(k);
+    return v && DUE_SOURCE_KINDS.includes(v as DueSourceKind) ? (v as DueSourceKind) : DEFAULT_KISHU_DUE_PRIORITY[i];
+  });
+  return new Set(p).size === 3 ? p : DEFAULT_KISHU_DUE_PRIORITY;
+}
+
+export function isDefaultKishuDuePriority(
+  priority: DueSourceKind[],
+  defaultPriority: DueSourceKind[] = DEFAULT_KISHU_DUE_PRIORITY,
+): boolean {
+  return (
+    priority.length === 3 &&
+    priority[0] === defaultPriority[0] &&
+    priority[1] === defaultPriority[1] &&
+    priority[2] === defaultPriority[2]
+  );
+}
+
 export interface DueCandidates {
   flexsche: Date | null;
   octopus: Date | null;
@@ -50,15 +79,6 @@ export function flexMaxFromRows(rows: { planEnd: Date | null }[]): Date | null {
   return d;
 }
 
-/** 旧2択（全体デフォルト・未設定機種用） */
-export function resolveFinalDue(
-  dueSource: 'flexsche' | 'pbs',
-  flexMax: Date | null,
-  pbsDue: Date | null,
-): Date | null {
-  return dueSource === 'pbs' ? (pbsDue ?? flexMax) : (flexMax ?? pbsDue);
-}
-
 export function resolveFinalDueFromPriority(
   priority: DueSourceKind[],
   candidates: DueCandidates,
@@ -73,11 +93,11 @@ export function resolveFinalDueFromPriority(
 export function resolveFinalDueForPart(
   kishu: string,
   candidates: DueCandidates,
-  ctx: Pick<MasterContext, 'params' | 'kishuDuePriority'>,
+  kishuDuePriority: MasterContext['kishuDuePriority'],
+  defaultPriority: DueSourceKind[],
 ): Date | null {
-  const custom = ctx.kishuDuePriority.get(kishu);
-  if (custom) return resolveFinalDueFromPriority(custom, candidates);
-  return resolveFinalDue(ctx.params.dueSource, candidates.flexsche, candidates.pbs);
+  const priority = kishuDuePriority.get(kishu) ?? defaultPriority;
+  return resolveFinalDueFromPriority(priority, candidates);
 }
 
 export interface ComputedItem {

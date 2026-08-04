@@ -2,7 +2,7 @@
 import type { PrismaService } from '../prisma/prisma.service';
 import { milestoneRowKey } from './milestone-mark.util';
 import type { DueSourceKind } from '../etl/etl-compute.util';
-import { DUE_SOURCE_KINDS } from '../etl/etl-compute.util';
+import { DUE_SOURCE_KINDS, parseDefaultKishuDuePriority } from '../etl/etl-compute.util';
 
 export interface CategoryRule {
   re: RegExp;
@@ -15,7 +15,6 @@ export interface MasterContext {
     stagnantThreshold: number;
     bufGreen: number;
     bufYellow: number;
-    dueSource: 'flexsche' | 'pbs';
   };
   /** shop::job の Set。工程マイルストン(◎)対象 */
   milestoneMarks: Set<string>;
@@ -25,8 +24,10 @@ export interface MasterContext {
   categoryRules: CategoryRule[]; // priority昇順
   holidays: Set<string>; // 'YYYY-MM-DD'（休日）
   vendors: { prefix: string; name: string }[]; // 長いprefix優先で探索
-  /** 機種別・最終納期候補の優先順位（3段）。未登録機種は params.dueSource の2択 */
+  /** 機種別・個別設定の優先順位（3段）。未登録＝標準を参照 */
   kishuDuePriority: Map<string, DueSourceKind[]>;
+  /** 標準の納期優先順位（m_param） */
+  defaultKishuDuePriority: DueSourceKind[];
 }
 
 export async function loadMasters(prisma: PrismaService): Promise<MasterContext> {
@@ -50,13 +51,13 @@ export async function loadMasters(prisma: PrismaService): Promise<MasterContext>
 
   const pmap = new Map<string, string>(param.map((r) => [r.key, r.value]));
   const numP = (k: string, d: number) => (pmap.has(k) ? Number(pmap.get(k)) : d);
+  const defaultKishuDuePriority = parseDefaultKishuDuePriority(pmap);
   const params: MasterContext['params'] = {
     shopLtDays: numP('SHOP_LT_DAYS', 4),
     milestoneLtDays: numP('MILESTONE_LT_DAYS', 5),
     stagnantThreshold: numP('STAGNANT_THRESHOLD', 10),
     bufGreen: numP('BUFFER_GREEN', 1),
     bufYellow: numP('BUFFER_YELLOW', 0),
-    dueSource: pmap.get('DUE_SOURCE') === 'pbs' ? 'pbs' : 'flexsche',
   };
   const milestoneMarks = new Set<string>();
   const gaicMarks = new Set<string>();
@@ -88,6 +89,7 @@ export async function loadMasters(prisma: PrismaService): Promise<MasterContext>
     holidays,
     vendors,
     kishuDuePriority,
+    defaultKishuDuePriority,
   };
 }
 

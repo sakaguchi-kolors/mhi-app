@@ -26,7 +26,22 @@
   .ingest-upload-row{display:grid;grid-template-columns:140px 1fr minmax(120px,1.4fr);gap:10px;align-items:center;font-size:13px;}
   .ingest-upload-label{font-weight:600;color:var(--text);}
   .ingest-upload-name{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .table-wrap{overflow-x:auto;}
+  .table-wrap{
+    width:100%;
+    max-height:var(--table-scroll-max-h);
+    overflow:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  .table-wrap > table{width:max-content;min-width:100%;}
+  .table-wrap thead th{
+    position:sticky;top:0;z-index:5;
+    background:var(--panel);
+    box-shadow:0 1px 0 var(--line);
+  }
+  .table-wrap .audit-result th{background:#f4f6fa;}
+  .main-inner > section:has(.table-wrap) > .panel:has(.table-wrap){
+    position:sticky;top:0;z-index:2;
+  }
   .pager{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);}
   .pager-info{font-weight:600;color:var(--text);}
   .pager-size{display:inline-flex;align-items:center;gap:8px;margin-left:auto;}
@@ -114,7 +129,7 @@
   .owner-kishu .kcell{padding:2px;text-align:center;}
   .owner-kishu .ksum{font-size:12px;color:var(--text);max-width:520px;white-space:normal;line-height:1.5;}
   .owner-kishu .sticky-col{position:sticky;left:0;background:#fff;z-index:2;min-width:132px;box-shadow:1px 0 0 var(--line);}
-  .owner-kishu thead .sticky-col{z-index:3;}
+  .owner-kishu thead .sticky-col{z-index:6;}
   /* 滞留 */
   .stag-cell{display:flex;flex-direction:column;gap:3px;align-items:flex-start;min-width:82px;}
   .stag-days{font-size:17px;font-weight:800;line-height:1;}

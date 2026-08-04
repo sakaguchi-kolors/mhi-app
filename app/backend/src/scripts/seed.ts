@@ -7,6 +7,7 @@ import { AppModule } from '../app.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_PARAMS, DEFAULT_MILESTONES, DEFAULT_CATEGORIES } from '../masters/masters.def';
 import { applyMilestoneRules } from '../masters/milestone-mark.util';
+import { DEFAULT_KISHU_DUE_PRIORITY } from '../etl/etl-compute.util';
 
 async function main(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn', 'log'] });
@@ -39,6 +40,21 @@ async function main(): Promise<void> {
       data: DEFAULT_CATEGORIES.map((c) => ({ pattern: c.pattern, category: c.category, priority: c.priority, active: true })),
     });
     console.log(`[seed] m_category seeded: ${DEFAULT_CATEGORIES.length}`);
+  }
+
+  const hasDefaultParams = (await prisma.param.count({
+    where: { key: { in: ['KISHU_DUE_PRIORITY_1', 'KISHU_DUE_PRIORITY_2', 'KISHU_DUE_PRIORITY_3'] } },
+  })) === 3;
+  if (!hasDefaultParams) {
+    await prisma.param.createMany({
+      data: [
+        { key: 'KISHU_DUE_PRIORITY_1', value: DEFAULT_KISHU_DUE_PRIORITY[0], description: '機種別納期優先順位（標準・第1優先）' },
+        { key: 'KISHU_DUE_PRIORITY_2', value: DEFAULT_KISHU_DUE_PRIORITY[1], description: '機種別納期優先順位（標準・第2優先）' },
+        { key: 'KISHU_DUE_PRIORITY_3', value: DEFAULT_KISHU_DUE_PRIORITY[2], description: '機種別納期優先順位（標準・第3優先）' },
+      ],
+      skipDuplicates: true,
+    });
+    console.log('[seed] KISHU_DUE_PRIORITY_* params ensured');
   }
 
   console.log('[seed] マスタ既定シード完了');

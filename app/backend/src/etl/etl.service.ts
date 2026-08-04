@@ -22,6 +22,8 @@ import {
 import {
   buildNameResolver,
   buildOctNameMap,
+  buildShopMasterRows,
+  collectFlexShopJobs,
   shopMasterEqual,
   shopMasterKey,
   toShopMasterRow,
@@ -59,7 +61,7 @@ export class EtlService {
     const { ymd: asOfYmd, date: asOf } = this.asOf.forIngest();
     const M = await loadMasters(this.prisma);
     this.logger.log(`CSV_DIR = ${csvDir}`);
-    this.logger.log(`AS_OF = ${asOfYmd} / DUE_SOURCE = ${M.params.dueSource} (master)`);
+    this.logger.log(`AS_OF = ${asOfYmd}`);
 
     const master = readCsv(csvDir, files.shopMaster);
     const nameByShopJob = new Map<string, string>();
@@ -167,7 +169,7 @@ export class EtlService {
         octopus: octJndByOsId.get(osId) ?? null,
         pbs: parsePbsMonthEnd(dueMonthByOsId.get(osId) ?? ''),
       };
-      const finalDue = resolveFinalDueForPart(agg.kishu, candidates, M);
+      const finalDue = resolveFinalDueForPart(agg.kishu, candidates, M.kishuDuePriority, M.defaultKishuDuePriority);
       return {
         osId,
         partNo: agg.partNo,
@@ -212,14 +214,21 @@ export class EtlService {
     }
     const { statusRows, timelineRows } = buildStatusTimelineRows(computed, asOf, computedAt);
 
-    const shopMasterMap = new Map<string, unknown[]>();
-    for (const r of master) {
-      const shop = clean(r['SHOP']);
-      const job = clean(r['JOB']);
-      if (!shop) continue;
-      shopMasterMap.set(`${shop}::${job}`, [shop, job, clean(r['作業名称']), clean(r['機械名称'])]);
+    const shopMasterEntries = buildShopMasterRows(
+      master.map((r) => ({
+        shop: clean(r['SHOP']),
+        job: clean(r['JOB']),
+        name: clean(r['作業名称']),
+        machine: clean(r['機械名称']),
+      })),
+      collectFlexShopJobs([...parts.values()].flatMap((agg) => agg.rows.map((rr) => ({ shop: rr.shop, job: rr.job })))),
+      octName,
+    );
+    const shopMasterRows = shopMasterEntries.map((r) => [r.shop, r.job, r.name, r.machine, r.source]);
+    const flexSupplementCount = shopMasterEntries.filter((r) => r.source === 'flexsche').length;
+    if (flexSupplementCount > 0) {
+      this.logger.log(`[etl] SHOP_JOB 未登録の FLEXSCHE 工程を ${flexSupplementCount} 件補完`);
     }
-    const shopMasterRows = [...shopMasterMap.values()];
     const kishuRows = [...new Set(computed.map((x) => x.meta.kishu).filter(Boolean))].map((k) => [k]);
     const shopNameRows = [...octName].filter(([s, nm]) => s && nm).map(([s, nm]) => [s, nm]);
 
@@ -235,8 +244,8 @@ export class EtlService {
         await tx.$executeRawUnsafe('DELETE FROM t_part');
         await tx.$executeRawUnsafe('DELETE FROM t_shop_master');
         await tx.$executeRawUnsafe('DELETE FROM t_shop_name');
-        await batchInsert(tx, 't_shop_master', ['shop', 'job', 'name', 'machine'], shopMasterRows,
-          'ON CONFLICT (shop,job) DO UPDATE SET name=EXCLUDED.name, machine=EXCLUDED.machine');
+        await batchInsert(tx, 't_shop_master', ['shop', 'job', 'name', 'machine', 'source'], shopMasterRows,
+          'ON CONFLICT (shop,job) DO UPDATE SET name=EXCLUDED.name, machine=EXCLUDED.machine, source=EXCLUDED.source');
         await batchInsert(tx, 't_part', ['os_id', 'part_no', 'part_name', 'category', 'kishu', 'final_due', 'pbs_due', 'oct_due', 'urgent_flag', 'shortage_flag'], partRows);
         await batchInsert(tx, 't_routing', ['os_id', 'seq', 'seq_label', 'shop', 'job', 'plan_start', 'plan_end', 'wip_flag', 'material_status', 'out_date', 'in_date', 'eta_date', 'req_due_date', 'order_no'], routingRows);
         await batchInsert(tx, 't_part_status', ['os_id', 'part_no', 'part_name', 'category', 'kishu', 'final_due', 'total_shops', 'done_shops', 'remain_shops', 'current_shop', 'days_left', 'buffer', 'color', 'stagnant_days', 'urgent', 'shortage', 'computed_at'], statusRows);
@@ -254,9 +263,7 @@ export class EtlService {
     this.logger.log(`[etl] db write ${Date.now() - t0Db}ms`);
 
     try {
-      await this.auditImportedShopMaster(auditUser, prevShopMaster, shopMasterRows.map((r) => toShopMasterRow({
-        shop: r[0], job: r[1], name: r[2], machine: r[3],
-      })));
+      await this.auditImportedShopMaster(auditUser, prevShopMaster, shopMasterEntries);
       await this.auditImportedKishu(auditUser, prevKishu, kishuRows.map((r) => String(r[0])));
     } catch (e) {
       this.logger.warn(`監査記録に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
@@ -319,7 +326,7 @@ export class EtlService {
     const asOfYmd = await this.asOf.getEffective();
     const asOf = await this.asOf.getEffectiveDate();
     const M = await loadMasters(this.prisma);
-    this.logger.log(`[recompute] AS_OF=${asOfYmd} / DUE_SOURCE=${M.params.dueSource}`);
+    this.logger.log(`[recompute] AS_OF=${asOfYmd}`);
 
     const nameByShopJob = new Map<string, string>();
     const nameByShop = new Map<string, string>();
@@ -378,7 +385,7 @@ export class EtlService {
       const pbsDue: Date | null = pr.pbsDue ? new Date(pr.pbsDue) : null;
       const octDue: Date | null = pr.octDue ? new Date(pr.octDue) : null;
       const kishu = pr.kishu ?? '';
-      const finalDue = resolveFinalDueForPart(kishu, { flexsche: flexMax, octopus: octDue, pbs: pbsDue }, M);
+      const finalDue = resolveFinalDueForPart(kishu, { flexsche: flexMax, octopus: octDue, pbs: pbsDue }, M.kishuDuePriority, M.defaultKishuDuePriority);
       const meta: PartMeta = {
         osId,
         partNo: pr.partNo ?? '',

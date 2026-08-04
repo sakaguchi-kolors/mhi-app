@@ -40,8 +40,6 @@ export function ParamEditor({ rows, parts, onSave }: Props) {
   const stagPreview = useMemo(() => parts.filter((p) => p.stagnant >= stagDraft).length, [parts, stagDraft]);
   const stagPreviewDiffers = stagCurrent !== stagPreview;
 
-  const dueSource = val('DUE_SOURCE', 'flexsche');
-
   const saveKey = async (key: string) => {
     const row = byKey.get(key);
     if (!row) return;
@@ -183,28 +181,6 @@ export function ParamEditor({ rows, parts, onSave }: Props) {
               </>
             }
           />
-          <div className="param-field">
-            <label>最終納期の採用元（全体デフォルト）</label>
-            <p className="mnote">{desc('DUE_SOURCE') || '機種別設定のない部品に適用する最終納期の出典。'}</p>
-            <p className="param-effect">保存後：機種別未設定の部品について、最終納期・残日数・バッファが切り替わります。</p>
-            <div className="param-inline">
-              <select value={dueSource} onChange={(e) => setVal('DUE_SOURCE', e.target.value)}>
-                <option value="flexsche">flexsche（小日程）</option>
-                <option value="pbs">pbs（計画納期）</option>
-              </select>
-              <button type="button" className="mbtn save" disabled={!dirty('DUE_SOURCE')} onClick={() => saveKey('DUE_SOURCE')}>
-                保存
-              </button>
-            </div>
-            <p className="mnote" style={{ marginBottom: 0 }}>
-              {dueSource === 'flexsche'
-                ? '小日程の最終工程日（JND）を優先し、欠損時はPBS計画納期を使います。'
-                : 'PBS計画納期（月）を優先し、欠損時は小日程JNDを使います。'}
-              {' '}機種ごとの3段階優先順位は「機種別納期優先順位」タブで設定します。
-              {dirty('DUE_SOURCE') && ' 保存すると、部品ごとの納期・色が更新されます。'}
-            </p>
-            <UpdatedMeta row={byKey.get('DUE_SOURCE') ?? {}} />
-          </div>
         </div>
       </div>
     </div>

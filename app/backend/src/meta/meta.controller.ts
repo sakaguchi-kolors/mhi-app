@@ -10,7 +10,7 @@ export class MetaController {
   constructor(private readonly meta: MetaService) {}
 
   @Get()
-  @ApiOperation({ summary: '基準日・担当者候補・DUE_SOURCE' })
+  @ApiOperation({ summary: '基準日・担当者候補・滞留閾値' })
   getMeta(): Promise<Meta> {
     return this.meta.getMeta();
   }
