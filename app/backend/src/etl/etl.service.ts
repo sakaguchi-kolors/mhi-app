@@ -29,6 +29,7 @@ import {
   toShopMasterRow,
 } from './etl-shop-master.util';
 import { BatchLockService } from './batch-lock.service';
+import { syncMilestoneArchive } from '../masters/milestone-usage.util';
 
 @Injectable()
 export class EtlService {
@@ -99,6 +100,7 @@ export class EtlService {
         job: clean(r['JOB']),
         planStart: parseDateTime(r['JIW(計算)']),
         planEnd: parseDateTime(r['JND(計算)']),
+        actualEnd: parseDateTime(r['JND(実績)']),
         wip: clean(r['仕掛']) === '1',
         materialStatus: clean(r['払出状況']),
         outDate: parseDateTime(r['外注持出日']),
@@ -208,7 +210,7 @@ export class EtlService {
       let seqN = 0;
       for (const rr of [...agg.rows].sort((a, b) => a.seqMain - b.seqMain || a.seqSub - b.seqSub)) {
         seqN++;
-        routingRows.push([osId, seqN, rr.seqLabel, rr.shop, rr.job, rr.planStart, rr.planEnd, rr.wip, rr.materialStatus, rr.outDate, rr.inDate, rr.etaDate, rr.reqDueDate, rr.orderNo]);
+        routingRows.push([osId, seqN, rr.seqLabel, rr.shop, rr.job, rr.planStart, rr.planEnd, rr.actualEnd, rr.wip, rr.materialStatus, rr.outDate, rr.inDate, rr.etaDate, rr.reqDueDate, rr.orderNo]);
       }
       assignRows.push([osId]);
     }
@@ -247,7 +249,7 @@ export class EtlService {
         await batchInsert(tx, 't_shop_master', ['shop', 'job', 'name', 'machine', 'source'], shopMasterRows,
           'ON CONFLICT (shop,job) DO UPDATE SET name=EXCLUDED.name, machine=EXCLUDED.machine, source=EXCLUDED.source');
         await batchInsert(tx, 't_part', ['os_id', 'part_no', 'part_name', 'category', 'kishu', 'final_due', 'pbs_due', 'oct_due', 'urgent_flag', 'shortage_flag'], partRows);
-        await batchInsert(tx, 't_routing', ['os_id', 'seq', 'seq_label', 'shop', 'job', 'plan_start', 'plan_end', 'wip_flag', 'material_status', 'out_date', 'in_date', 'eta_date', 'req_due_date', 'order_no'], routingRows);
+        await batchInsert(tx, 't_routing', ['os_id', 'seq', 'seq_label', 'shop', 'job', 'plan_start', 'plan_end', 'actual_end', 'wip_flag', 'material_status', 'out_date', 'in_date', 'eta_date', 'req_due_date', 'order_no'], routingRows);
         await batchInsert(tx, 't_part_status', ['os_id', 'part_no', 'part_name', 'category', 'kishu', 'final_due', 'total_shops', 'done_shops', 'remain_shops', 'current_shop', 'days_left', 'buffer', 'color', 'stagnant_days', 'urgent', 'shortage', 'computed_at'], statusRows);
         await batchInsert(tx, 't_timeline', ['os_id', 'seq', 'shop', 'name', 'status', 'plan_end', 'is_milestone', 'ms_passed', 'ms_color', 'ms_due', 'gaic', 'gaic_status', 'gaic_phase', 'order_no', 'out_date', 'in_date', 'eta_date', 'req_due_date'], timelineRows);
         await batchInsert(tx, 't_assignment', ['os_id'], assignRows, 'ON CONFLICT DO NOTHING');
@@ -261,6 +263,15 @@ export class EtlService {
       { timeout: 600000, maxWait: 60000 },
     );
     this.logger.log(`[etl] db write ${Date.now() - t0Db}ms`);
+
+    try {
+      const { archived, restored } = await syncMilestoneArchive(this.prisma, auditUser);
+      if (archived > 0 || restored > 0) {
+        this.logger.log(`[etl] milestone archive sync archived=${archived} restored=${restored}`);
+      }
+    } catch (e) {
+      this.logger.warn(`中間マイルストン過去マスタ同期に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
+    }
 
     try {
       await this.auditImportedShopMaster(auditUser, prevShopMaster, shopMasterEntries);
@@ -368,6 +379,7 @@ export class EtlService {
         job: r.job ?? '',
         planStart: r.planStart ?? null,
         planEnd: r.planEnd ?? null,
+        actualEnd: r.actualEnd ?? null,
         wip: !!r.wipFlag,
         materialStatus: r.materialStatus ?? '',
         outDate: r.outDate ?? null,

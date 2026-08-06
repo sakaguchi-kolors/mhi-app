@@ -27,14 +27,17 @@ export const MASTERS: MasterDef[] = [
     group: 'edit',
     pk: 'shop_job',
     autoId: false,
-    note: 'SHOP_JOBマスタを基本とし、FLEXSCHEにのみ存在する工程は取込時に自動補完されます。工程マイルストン(◎)・外注(外)をチェックで指定します。保存するとタイムラインに自動反映されます。',
+    note: 'SHOP_JOBマスタを基本とし、FLEXSCHEにのみ存在する工程は取込時に自動補完されます。取込時に利用中でない工程は過去マスタへ自動退避されます。工程マイルストン(◎)・外注(外)をチェックで指定します。保存するとタイムラインに自動反映されます。',
     columns: [
       { key: 'shop', label: 'SHOP', type: 'text', readonly: true },
       { key: 'job', label: 'JOB', type: 'text', readonly: true },
       { key: 'name', label: '作業名称', type: 'text', readonly: true },
       { key: 'source', label: '取得元', type: 'text', readonly: true },
+      { key: 'in_use', label: '利用中', type: 'bool', readonly: true },
+      { key: 'last_used_at', label: '最終利用日', type: 'date', readonly: true },
       { key: 'is_milestone', label: '工程マイルストン', type: 'bool' },
       { key: 'gaic', label: '外注', type: 'bool' },
+      { key: 'archived', label: '過去マスタ', type: 'bool' },
     ],
   },
   {

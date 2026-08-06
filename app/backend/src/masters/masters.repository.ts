@@ -3,6 +3,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { milestoneRowKey, parseMilestoneRowKey } from './milestone-mark.util';
+import { loadMilestoneUsageStats } from './milestone-usage.util';
 import { DUE_SOURCE_KINDS, isDefaultKishuDuePriority, parseDefaultKishuDuePriority, type DueSourceKind } from '../etl/etl-compute.util';
 import type { ColDef, MasterDef } from './masters.def';
 
@@ -18,6 +19,9 @@ const FIELD_MAP: Record<string, string> = {
   priority_2: 'priority2',
   priority_3: 'priority3',
   is_milestone: 'isMilestone',
+  in_use: 'inUse',
+  last_used_at: 'lastUsedAt',
+  archived_manual: 'archivedManual',
   cal_date: 'calDate',
   is_workday: 'isWorkday',
   order_prefix: 'orderPrefix',
@@ -44,7 +48,7 @@ function coerce(col: ColDef, v: unknown): unknown {
 function serializeValue(key: string, v: unknown): unknown {
   if (v == null) return null;
   if (v instanceof Date) {
-    if (key === 'cal_date') return `${v.getUTCFullYear()}-${String(v.getUTCMonth() + 1).padStart(2, '0')}-${String(v.getUTCDate()).padStart(2, '0')}`;
+    if (key === 'cal_date' || key === 'last_used_at') return `${v.getUTCFullYear()}-${String(v.getUTCMonth() + 1).padStart(2, '0')}-${String(v.getUTCDate()).padStart(2, '0')}`;
     return v.toISOString();
   }
   if (typeof v === 'object' && 'toFixed' in (v as object)) return String(v);
@@ -101,11 +105,12 @@ function validateKishuDuePriority(body: MasterRow): DueSourceKind[] {
 export class MastersRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** SHOP_JOBマスタ全行 + m_milestone のフラグをマージ */
+  /** SHOP_JOBマスタ全行 + m_milestone のフラグ + 利用状況をマージ */
   private async findMilestoneRows(def: MasterDef): Promise<MasterRow[]> {
-    const [shops, marks] = await Promise.all([
+    const [shops, marks, usageMap] = await Promise.all([
       this.prisma.shopMaster.findMany({ orderBy: [{ shop: 'asc' }, { job: 'asc' }] }),
       this.prisma.milestone.findMany(),
+      loadMilestoneUsageStats(this.prisma),
     ]);
     const markMap = new Map(marks.map((m) => [milestoneRowKey(m.shop, m.job), m]));
     return shops.map((sm) => {
@@ -113,13 +118,18 @@ export class MastersRepository {
       const job = String(sm.job);
       const key = milestoneRowKey(shop, job);
       const m = markMap.get(key);
+      const usage = usageMap.get(key) ?? { inUse: false, lastUsedAt: null };
       const record: Record<string, unknown> = {
         shop,
         job,
         name: sm.name,
         source: sm.source ?? 'shop_job',
+        inUse: usage.inUse,
+        lastUsedAt: usage.lastUsedAt,
         isMilestone: m?.isMilestone ?? false,
         gaic: m?.gaic ?? false,
+        archived: m?.archived ?? !usage.inUse,
+        archivedManual: m?.archivedManual ?? false,
         shop_job: key,
         createdAt: m?.createdAt,
         createdBy: m?.createdBy,
@@ -228,18 +238,31 @@ export class MastersRepository {
         const isMs = body.is_milestone === true || body.is_milestone === 'true';
         const gaic = body.gaic === true || body.gaic === 'true';
         const key = milestoneRowKey(shop, job);
-        if (!isMs && !gaic) {
+        const existing = await this.prisma.milestone.findUnique({ where: { shop_job: { shop, job } } });
+        const usage = (await loadMilestoneUsageStats(this.prisma)).get(key) ?? { inUse: false, lastUsedAt: null };
+        const archivedTouched = 'archived' in body;
+        const archived = archivedTouched
+          ? body.archived === true || body.archived === 'true'
+          : (existing?.archived ?? !usage.inUse);
+        const archivedManual = archivedTouched ? true : (existing?.archivedManual ?? false);
+
+        if (!isMs && !gaic && !archived) {
           await this.prisma.milestone.deleteMany({ where: { shop, job } });
           const sm = await this.prisma.shopMaster.findUnique({ where: { shop_job: { shop, job } } });
-          return {
+          return modelToRow(def, {
             shop,
             job,
             shop_job: key,
             name: sm?.name ?? body.name ?? '',
-            is_milestone: false,
+            inUse: usage.inUse,
+            lastUsedAt: usage.lastUsedAt,
+            isMilestone: false,
             gaic: false,
-          };
+            archived: !usage.inUse,
+            archivedManual: false,
+          });
         }
+
         const row = await this.prisma.milestone.upsert({
           where: { shop_job: { shop, job } },
           create: {
@@ -247,6 +270,8 @@ export class MastersRepository {
             job,
             isMilestone: isMs,
             gaic,
+            archived,
+            archivedManual,
             createdAt: now,
             createdBy: user,
             updatedAt: now,
@@ -255,6 +280,8 @@ export class MastersRepository {
           update: {
             isMilestone: isMs,
             gaic,
+            archived,
+            archivedManual,
             updatedAt: now,
             updatedBy: user,
           },
@@ -264,6 +291,8 @@ export class MastersRepository {
           ...row,
           name: sm?.name ?? body.name ?? '',
           shop_job: key,
+          inUse: usage.inUse,
+          lastUsedAt: usage.lastUsedAt,
         };
         return modelToRow(def, record);
       }

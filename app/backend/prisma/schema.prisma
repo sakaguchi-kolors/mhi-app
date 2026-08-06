@@ -50,6 +50,7 @@ model Routing {
   job            String?
   planStart      DateTime? @map("plan_start") @db.Timestamptz() // JIW(計算)
   planEnd        DateTime? @map("plan_end") @db.Timestamptz() // JND(計算)
+  actualEnd      DateTime? @map("actual_end") @db.Timestamptz() // JND(実績)
   wipFlag        Boolean   @default(false) @map("wip_flag") // 仕掛=1（現在位置）
   materialStatus String?   @map("material_status") // 払出状況
   outDate        DateTime? @map("out_date") @db.Date // 外注持出日
@@ -190,9 +191,11 @@ model Param {
 model Milestone {
   shop        String
   job         String
-  isMilestone Boolean  @default(false) @map("is_milestone")
-  gaic        Boolean  @default(false)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  isMilestone    Boolean  @default(false) @map("is_milestone")
+  gaic           Boolean  @default(false)
+  archived       Boolean  @default(false)
+  archivedManual Boolean  @default(false) @map("archived_manual")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
   createdBy   String?  @map("created_by")
   updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz()
   updatedBy   String?  @map("updated_by")

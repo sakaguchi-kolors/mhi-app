@@ -8,6 +8,7 @@ export interface RoutingRow {
   job: string;
   planStart: Date | null;
   planEnd: Date | null;
+  actualEnd: Date | null;
   wip: boolean;
   materialStatus: string;
   outDate: Date | null;
