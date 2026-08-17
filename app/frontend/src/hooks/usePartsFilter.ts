@@ -5,10 +5,16 @@ import { computePartsKpi, matchPartsFilter, type ChipFilter } from '../lib/parts
 
 export type { ChipFilter };
 
-export function usePartsFilter(parts: Part[], stagnantThreshold: number, defaultOwnerFilter?: string) {
+export function usePartsFilter(
+  parts: Part[],
+  stagnantThreshold: number,
+  defaultOwnerFilter?: string,
+  initialShop?: string,
+) {
   const [filter, setFilter] = useState<ChipFilter>('all');
   const [cat, setCat] = useState('all');
   const [owner, setOwner] = useState(defaultOwnerFilter ?? 'all');
+  const [shop, setShop] = useState(initialShop ?? '');
   // 機種フィルタのみ localStorage に永続化（よく使う絞り込みを再訪問時も維持するため）
   const [kishu, setKishu] = useState(() => localStorage.getItem('mop_kishu') ?? 'all');
   const [showShelved, setShowShelved] = useState(false);
@@ -20,9 +26,13 @@ export function usePartsFilter(parts: Part[], stagnantThreshold: number, default
 
   const toggleFilter = (next: ChipFilter) => setFilter((cur) => (cur === next ? 'all' : next));
 
+  useEffect(() => {
+    setShop(initialShop ?? '');
+  }, [initialShop]);
+
   const filterState = useMemo(
-    () => ({ filter, cat, kishu, owner, query, showShelved, stagnantThreshold }),
-    [filter, cat, kishu, owner, query, showShelved, stagnantThreshold],
+    () => ({ filter, cat, kishu, owner, query, showShelved, stagnantThreshold, shop }),
+    [filter, cat, kishu, owner, query, showShelved, stagnantThreshold, shop],
   );
 
   const match = useCallback(
@@ -51,6 +61,8 @@ export function usePartsFilter(parts: Part[], stagnantThreshold: number, default
     kishu,
     query,
     showShelved,
+    shop,
+    setShop,
     setQuery,
     setCat,
     setOwner,

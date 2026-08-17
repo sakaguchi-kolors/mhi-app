@@ -51,6 +51,7 @@ model Routing {
   planStart      DateTime? @map("plan_start") @db.Timestamptz() // JIW(計算)
   planEnd        DateTime? @map("plan_end") @db.Timestamptz() // JND(計算)
   actualEnd      DateTime? @map("actual_end") @db.Timestamptz() // JND(実績)
+  hs             Decimal?  @db.Decimal // 標準時間(Standard Hours)。FLEXSCHE Hs列。正味作業時間でありLTではない
   wipFlag        Boolean   @default(false) @map("wip_flag") // 仕掛=1（現在位置）
   materialStatus String?   @map("material_status") // 払出状況
   outDate        DateTime? @map("out_date") @db.Date // 外注持出日
@@ -215,6 +216,22 @@ model ShopLt {
   updatedBy String?  @map("updated_by")
 
   @@map("m_shop_lt")
+}
+
+// Shop別 実績リードタイム集計 t_shop_lt_stat（バッチ再生成）
+//   JND(実績)の前工程完了→当工程完了インターバルをSHOP別に集計したもの。
+//   m_shop_lt（手入力の標準LT）の「推奨値」として提示し、採用は人が判断する。
+model ShopLtStat {
+  shop       String   @id
+  n          Int // サンプル数
+  p50        Decimal  @db.Decimal
+  p75        Decimal  @db.Decimal
+  p90        Decimal  @db.Decimal
+  mean       Decimal  @db.Decimal
+  hsMedian   Decimal? @map("hs_median") @db.Decimal // 参考：同SHOPのHs中央値(時間)
+  computedAt DateTime @map("computed_at") @db.Timestamptz()
+
+  @@map("t_shop_lt_stat")
 }
 
 // 稼働日カレンダー m_calendar: 休日を登録すると残日数を稼働日ベースに

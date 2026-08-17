@@ -74,6 +74,8 @@ describe('computePart integration', () => {
     job: '0000',
     planStart: d('2026-01-01'),
     planEnd: d('2026-06-01'),
+    actualEnd: null,
+    hs: null,
     wip,
     materialStatus: '4_材料払出済',
     outDate: null,

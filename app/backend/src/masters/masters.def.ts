@@ -128,6 +128,18 @@ export const DEFAULT_PARAMS: { key: string; value: string; description: string }
   { key: 'KISHU_DUE_PRIORITY_1', value: 'pbs', description: '機種別納期優先順位（標準・第1優先）' },
   { key: 'KISHU_DUE_PRIORITY_2', value: 'flexsche', description: '機種別納期優先順位（標準・第2優先）' },
   { key: 'KISHU_DUE_PRIORITY_3', value: 'octopus', description: '機種別納期優先順位（標準・第3優先）' },
+  { key: 'HEAT_WEEKS', value: '12', description: '工程ヒートマップの既定表示週数' },
+  { key: 'HEAT_MIN_COUNT', value: '3', description: 'ヒートマップ：この件数未満のセルは混雑判定せず平常とする' },
+  { key: 'HEAT_LEVEL_WARN', value: '1.2', description: 'ヒートマップ：平常時の何倍で「やや混雑（黄）」' },
+  { key: 'HEAT_LEVEL_ALERT', value: '1.5', description: 'ヒートマップ：平常時の何倍で「混雑（赤）」' },
+  { key: 'HEAT_LEVEL_CRIT', value: '2', description: 'ヒートマップ：平常時の何倍で「過密（濃赤）」' },
+  { key: 'HEAT_ABS_WARN', value: '0', description: 'ヒートマップ：件数そのものが何件で黄（0=使わない）' },
+  { key: 'HEAT_ABS_ALERT', value: '0', description: 'ヒートマップ：件数そのものが何件で赤（0=使わない）' },
+  { key: 'HEAT_ABS_CRIT', value: '0', description: 'ヒートマップ：件数そのものが何件で濃赤（0=使わない）' },
+  { key: 'LT_MODE', value: 'fixed', description: 'Shop別LTの算出方式（fixed=マスタ固定 / actual=実績集計）' },
+  { key: 'LT_ACTUAL_PERCENTILE', value: 'p50', description: '実績LTのどの分位点を採用するか（p50 / p75 / p90）' },
+  { key: 'LT_MIN_SAMPLES', value: '10', description: '実績LTを採用するのに必要な最小サンプル数' },
+  { key: 'LT_ACTUAL_MAX_DAYS', value: '365', description: '実績LT集計：これを超える工程間隔は異常値として除外' },
 ];
 
 export const DEFAULT_MILESTONES: { match_type: string; pattern: string; label: string }[] = [

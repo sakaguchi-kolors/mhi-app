@@ -5,6 +5,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { PartsModule } from './parts/parts.module';
 import { MetaModule } from './meta/meta.module';
+import { HeatmapModule } from './heatmap/heatmap.module';
+import { LtModule } from './lt/lt.module';
 import { MastersModule } from './masters/masters.module';
 import { OwnersModule } from './owners/owners.module';
 import { EtlModule } from './etl/etl.module';
@@ -19,6 +21,8 @@ import { BatchModule } from './batch/batch.module';
     AuthModule,
     PartsModule,
     MetaModule,
+    HeatmapModule,
+    LtModule,
     MastersModule,
     OwnersModule,
     EtlModule,

@@ -3,6 +3,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { milestoneRowKey } from './milestone-mark.util';
 import type { DueSourceKind } from '../etl/etl-compute.util';
 import { DUE_SOURCE_KINDS, parseDefaultKishuDuePriority } from '../etl/etl-compute.util';
+import { buildShopLtMap, LT_PERCENTILE_KEYS, type LtPercentileKey } from '../lt/lt.logic';
 
 export interface CategoryRule {
   re: RegExp;
@@ -15,6 +16,8 @@ export interface MasterContext {
     stagnantThreshold: number;
     bufGreen: number;
     bufYellow: number;
+    /** fixed=m_shop_lt のみ / actual=実績集計を併用 */
+    ltMode: 'fixed' | 'actual';
   };
   /** shop::job の Set。工程マイルストン(◎)対象 */
   milestoneMarks: Set<string>;
@@ -31,7 +34,7 @@ export interface MasterContext {
 }
 
 export async function loadMasters(prisma: PrismaService): Promise<MasterContext> {
-  const [param, ms, lt, cal, ven, cat, kishuDue] = await Promise.all([
+  const [param, ms, lt, cal, ven, cat, kishuDue, ltStat] = await Promise.all([
     prisma.param.findMany({ select: { key: true, value: true } }),
     prisma.milestone.findMany({
       select: { shop: true, job: true, isMilestone: true, gaic: true },
@@ -47,6 +50,7 @@ export async function loadMasters(prisma: PrismaService): Promise<MasterContext>
     prisma.kishuDuePriority.findMany({
       select: { kishu: true, priority1: true, priority2: true, priority3: true },
     }),
+    prisma.shopLtStat.findMany(),
   ]);
 
   const pmap = new Map<string, string>(param.map((r) => [r.key, r.value]));
@@ -58,6 +62,7 @@ export async function loadMasters(prisma: PrismaService): Promise<MasterContext>
     stagnantThreshold: numP('STAGNANT_THRESHOLD', 10),
     bufGreen: numP('BUFFER_GREEN', 1),
     bufYellow: numP('BUFFER_YELLOW', 0),
+    ltMode: pmap.get('LT_MODE') === 'actual' ? 'actual' : 'fixed',
   };
   const milestoneMarks = new Set<string>();
   const gaicMarks = new Set<string>();
@@ -66,7 +71,22 @@ export async function loadMasters(prisma: PrismaService): Promise<MasterContext>
     if (r.isMilestone) milestoneMarks.add(key);
     if (r.gaic) gaicMarks.add(key);
   }
-  const shopLt = new Map<string, number>(lt.map((r) => [String(r.shop), Number(r.ltDays)]));
+  const pctKey = pmap.get('LT_ACTUAL_PERCENTILE');
+  const shopLt = buildShopLtMap(
+    params.ltMode,
+    new Map<string, number>(lt.map((r) => [String(r.shop), Number(r.ltDays)])),
+    ltStat.map((r) => ({
+      shop: r.shop,
+      n: r.n,
+      p50: Number(r.p50),
+      p75: Number(r.p75),
+      p90: Number(r.p90),
+      mean: Number(r.mean),
+      hsMedian: r.hsMedian == null ? null : Number(r.hsMedian),
+    })),
+    LT_PERCENTILE_KEYS.includes(pctKey as LtPercentileKey) ? (pctKey as LtPercentileKey) : 'p50',
+    numP('LT_MIN_SAMPLES', 10),
+  );
   const categoryRules: CategoryRule[] = cat.map((r) => ({ re: safeRe(r.pattern), category: r.category }));
   const holidays = new Set<string>(cal.filter((r) => r.isWorkday === false).map((r) => isoDate(r.calDate)));
   const vendors = ven

@@ -28,6 +28,15 @@ export function parsePbsMonthEnd(s: string): Date | null {
   return new Date(y, mo, 0);
 }
 
+/** 数値列のパース。桁区切りカンマを許容し、非数値・負値は null */
+export function parseNum(s: string | undefined): number | null {
+  const v = clean(s).replace(/,/g, '');
+  if (!v) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
 export function parseSeq(label: string): { main: number; sub: number } {
   const v = clean(label);
   const [a, b] = v.split('-');

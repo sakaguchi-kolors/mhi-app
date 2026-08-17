@@ -3,8 +3,10 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { AsOfService } from '../config/as-of.service';
 import { AuditService } from '../audit/audit.service';
-import type { Part, TimelineCell, Color, CellStatus, GaicStatus, GaicPhase } from '../common/types';
+import type { AdjustSupport, Part, TimelineCell, Color, CellStatus, GaicStatus, GaicPhase } from '../common/types';
 import { mmdd, ymd, daysSince } from '../shared/dates';
+import { loadMasters } from '../masters/masters.util';
+import { buildAdjustSupport } from '../adjust/adjust.logic';
 
 const MAX_TEXT_LEN = 2000;
 
@@ -85,6 +87,44 @@ export class PartsService {
     return timelines;
   }
 
+  /** 部品詳細の調整支援（現行想定LT vs Hs） */
+  async getAdjustSupport(osId: string): Promise<AdjustSupport> {
+    const status = await this.prisma.partStatus.findUnique({
+      where: { osId },
+      select: { osId: true, daysLeft: true, finalDue: true },
+    });
+    if (!status) throw new NotFoundException(`部品 ${osId} が見つかりません`);
+
+    const [routing, timeline, masters] = await Promise.all([
+      this.prisma.routing.findMany({
+        where: { osId },
+        orderBy: { seq: 'asc' },
+        select: { shop: true, job: true, hs: true, wipFlag: true },
+      }),
+      this.prisma.timeline.findMany({
+        where: { osId, NOT: { status: 'done' } },
+        orderBy: { seq: 'asc' },
+        select: { shop: true, name: true },
+      }),
+      loadMasters(this.prisma),
+    ]);
+
+    return buildAdjustSupport({
+      rows: routing.map((r) => ({
+        shop: r.shop ?? '',
+        job: r.job ?? '',
+        hs: r.hs == null ? null : Number(r.hs),
+        wip: r.wipFlag,
+      })),
+      daysLeft: status.daysLeft ?? 0,
+      finalDue: status.finalDue,
+      shopLt: masters.shopLt,
+      defaultLt: masters.params.shopLtDays,
+      holidays: masters.holidays,
+      names: timeline.map((t) => ({ shop: t.shop ?? '', name: t.name ?? '' })),
+    });
+  }
+
   /** 一覧＋タイムライン（後方互換・ETL 等） */
   async buildParts(): Promise<Part[]> {
     const summaries = await this.buildPartsSummary();
@@ -99,7 +139,7 @@ export class PartsService {
 
   private async assembleSummaries(computedAt: Date | null): Promise<Part[]> {
     const asOf = await this.asOf.getEffectiveDate();
-    const [status, assign, trouble, shelved, note] = await Promise.all([
+    const [status, assign, trouble, shelved, note, current] = await Promise.all([
       this.prisma.partStatus.findMany(),
       this.prisma.assignment.findMany({
         select: { osId: true, userId: true, assignedAt: true, user: { select: { displayName: true } } },
@@ -107,9 +147,12 @@ export class PartsService {
       this.prisma.trouble.findMany({ select: { osId: true, flagged: true, flaggedAt: true, memo: true } }),
       this.prisma.shelved.findMany({ select: { osId: true, flagged: true } }),
       this.prisma.note.findMany({ select: { osId: true, body: true } }),
+      // 現在地の SHOP コード。t_part_status は名称しか持たないので t_timeline から引く
+      this.prisma.timeline.findMany({ where: { status: 'current' }, select: { osId: true, shop: true } }),
     ]);
 
     const aMap = new Map(assign.map((r) => [r.osId, r]));
+    const cMap = new Map(current.map((r) => [r.osId, r.shop ?? '']));
     const tMap = new Map(trouble.map((r) => [r.osId, r]));
     const sMap = new Map(shelved.map((r) => [r.osId, r]));
     const nMap = new Map(note.map((r) => [r.osId, r]));
@@ -136,6 +179,7 @@ export class PartsService {
         urgent: s.urgent ?? false,
         shortage: s.shortage ?? false,
         currentShop: s.currentShop ?? '',
+        currentShopCode: cMap.get(s.osId) ?? '',
         timeline: [],
         inst: String(s.osId).replace(/\D/g, '').slice(-4),
         owner,

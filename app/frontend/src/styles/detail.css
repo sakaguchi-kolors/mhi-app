@@ -23,6 +23,7 @@
   .calc .row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed #e7edf6;}
   .calc .row:last-child{border-bottom:none;font-weight:800;font-size:15px;}
   .calc .val{font-variant-numeric:tabular-nums;}
+  .calc .calc-sub{margin-left:6px;font-size:11px;font-weight:400;color:var(--muted);}
   .calc .val.red{color:var(--red);} .calc .val.green{color:var(--green);}
   .stag-box{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;margin-bottom:12px;}
   .stag-box.flag{background:var(--red-bg);border:1px solid var(--red-soft);} .stag-box.ok{background:var(--green-bg);border:1px solid var(--green-soft);}

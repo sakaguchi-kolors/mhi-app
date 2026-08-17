@@ -4,6 +4,7 @@ export const routes = {
   setup: '/setup',
   parts: '/parts',
   part: (id: string) => `/parts/${encodeURIComponent(id)}`,
+  heatmap: '/heatmap',
   troubles: '/troubles',
   ingest: '/ingest',
   owners: '/owners',
@@ -12,11 +13,12 @@ export const routes = {
   masterHistory: '/masters/history',
 } as const;
 
-export type ScreenKey = 'parts' | 'detail' | 'troubles' | 'ingest' | 'owners' | 'masters';
+export type ScreenKey = 'parts' | 'detail' | 'heatmap' | 'troubles' | 'ingest' | 'owners' | 'masters';
 
 /** パスからサイドバーアクティブ判定用の画面キー */
 export function screenFromPath(pathname: string): ScreenKey {
   if (pathname.startsWith('/parts/') && pathname !== '/parts') return 'detail';
+  if (pathname === routes.heatmap) return 'heatmap';
   if (pathname === routes.troubles) return 'troubles';
   if (pathname === routes.ingest) return 'ingest';
   if (pathname === routes.owners) return 'owners';
@@ -35,6 +37,7 @@ export function masterNameFromPath(pathname: string): string | null {
 export const PAGE_TITLES: Record<ScreenKey, string> = {
   parts: '部品一覧',
   detail: '部品詳細',
+  heatmap: '工程ヒートマップ',
   troubles: '困りごと',
   ingest: 'データ取込',
   owners: '担当者',

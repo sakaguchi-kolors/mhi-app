@@ -14,6 +14,9 @@
   .kpi.red .num{color:var(--red);} .kpi.yellow .num{color:var(--yellow);}
   .kpi.green .num{color:var(--green);} .kpi.stag .num{color:var(--red);}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+  .shop-filter-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;background:var(--info-bg);border:1px solid #c8daf0;border-radius:12px;font-size:12px;color:var(--text);}
+  .shop-filter-name{color:var(--muted);}
+  .shop-filter-note{margin-left:auto;color:var(--muted);}
   .toolbar-search{flex:1 1 220px;min-width:200px;max-width:360px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;font-size:12px;color:var(--text);background:#fff;}
   .toolbar-search::placeholder{color:var(--muted);}
   .chip{border:1px solid var(--line);background:#fff;border-radius:20px;padding:7px 14px;font-size:12px;cursor:pointer;transition:.15s;}

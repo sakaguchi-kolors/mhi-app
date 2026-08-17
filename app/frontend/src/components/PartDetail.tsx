@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { Part } from '../types';
 import { jc } from '../util';
+import { AdjustSupport } from './AdjustSupport';
 import { GaicBadges } from './GaicBadges';
+import { PartCongestion } from './PartCongestion';
 
 export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: { part: Part; stagnantThreshold?: number; onBack: () => void; onNote: (id: string, note: string) => void }) {
   const [note, setNote] = useState(p.note ?? '');
@@ -9,7 +11,9 @@ export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- p.id のみ意図的
   useEffect(() => { setNote(p.note ?? ''); }, [p.id]);
 
-  const need = p.remainShops * 4;
+  // 所要日数は Shop 別LT の合計なので、固定値を掛け直さず算出済みの値から逆算する
+  const need = p.daysLeft - p.buffer;
+  const perShop = p.remainShops > 0 ? Math.round((need / p.remainShops) * 10) / 10 : 0;
   const flag = p.stagnant >= stagnantThreshold;
 
   return (
@@ -60,7 +64,13 @@ export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: 
             <div className="calc">
               <div className="row"><span>最終納期（払出期日）</span><span className="val">{p.finalDue}</span></div>
               <div className="row"><span>残日数（基準日→納期）</span><span className="val">{p.daysLeft}日</span></div>
-              <div className="row"><span>残Shop数 × 4日/Shop</span><span className="val">{p.remainShops} × 4 = {need}日</span></div>
+              <div className="row">
+                <span>残Shop数 × Shop所要日数</span>
+                <span className="val">
+                  残{p.remainShops}Shop = {need}日
+                  {p.remainShops > 0 && <span className="calc-sub">（平均 {perShop}日/Shop）</span>}
+                </span>
+              </div>
               <div className="row"><span>バッファ = 残日数 − 所要</span><span className={`val ${p.buffer < 0 ? 'red' : 'green'}`}>{p.buffer >= 0 ? '+' : ''}{p.buffer}日 → {jc(p.color)}</span></div>
             </div>
             <div className={`stag-box ${flag ? 'flag' : 'ok'}`}>
@@ -84,6 +94,9 @@ export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: 
           </div>
         </div>
       </div>
+
+      <PartCongestion osId={p.id} />
+      <AdjustSupport osId={p.id} />
     </section>
   );
 }

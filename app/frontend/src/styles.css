@@ -5,4 +5,7 @@
 @import "./styles/masters-table.css";
 @import "./styles/auth.css";
 @import "./styles/troubles.css";
+@import "./styles/heatmap.css";
+@import "./styles/congestion.css";
+@import "./styles/adjust.css";
 @import "./styles/masters-forms.css";

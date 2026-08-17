@@ -92,13 +92,25 @@ export function toShopMasterRow(r: {
   };
 }
 
+/**
+ * 工程名の表示用クレンジング。
+ * SHOP_JOBマスタの作業名称には改行代わりの制御文字(\x02)や連続空白が入っており、
+ * そのままだと一覧やヒートマップの行が極端に横長になる。
+ */
+export function cleanShopName(name: string): string {
+  return name
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/[\u3000\s]+/g, ' ')
+    .trim();
+}
+
 export function buildNameResolver(
   nameByShopJob: Map<string, string>,
   nameByShop: Map<string, string>,
   octName: Map<string, string>,
 ): (shop: string, job: string) => string {
   return (shop: string, job: string): string =>
-    nameByShopJob.get(`${shop}::${job}`) ?? nameByShop.get(shop) ?? octName.get(shop) ?? `Shop ${shop}`;
+    cleanShopName(nameByShopJob.get(`${shop}::${job}`) ?? nameByShop.get(shop) ?? octName.get(shop) ?? `Shop ${shop}`);
 }
 
 export function buildOctNameMap(octFreq: Map<string, Map<string, number>>): Map<string, string> {

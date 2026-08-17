@@ -12,6 +12,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { path: routes.parts, label: '部品一覧', icon: '☰' },
+  { path: routes.heatmap, label: '工程ヒートマップ', icon: '▦' },
   { path: routes.troubles, label: '困りごと', icon: '⚠' },
   { path: routes.ingest, label: 'データ取込', icon: '↓', adminOnly: true },
   { path: routes.owners, label: '担当者', icon: '👤', adminOnly: true },

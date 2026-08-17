@@ -1,6 +1,6 @@
 // API クライアント（契約は据え置き＝バックの /api/* をそのまま呼ぶ）。
 // 認証は httpOnly Cookie。全リクエストで credentials を送る。
-import type { Part, Meta, MasterDef, AuditRow, AuditSearchResult, IngestInfo, IngestJob, IngestFile, IngestUploadResult, OwnersData } from './types';
+import type { Part, Meta, MasterDef, AuditRow, AuditSearchResult, IngestInfo, IngestJob, IngestFile, IngestUploadResult, OwnersData, Color, HeatCellDetail, HeatGroupBy, HeatMode, HeatUnit, HeatmapResult, AdjustSupport, PartCongestion } from './types';
 
 // 認証ユーザー
 export interface Me {
@@ -73,6 +73,44 @@ export const setTrouble = (id: string, flagged: boolean) => post(`/api/parts/${e
 export const setShelved = (id: string, flagged: boolean) => post(`/api/parts/${encodeURIComponent(id)}/shelved`, { flagged });
 export const setMemo = (id: string, memo: string) => post(`/api/parts/${encodeURIComponent(id)}/memo`, { memo });
 export const setNote = (id: string, note: string) => post(`/api/parts/${encodeURIComponent(id)}/note`, { note });
+
+// ===== 工程ヒートマップ =====
+export interface HeatFilterParams {
+  kishu?: string;
+  category?: string;
+  owner?: string;
+  color?: Color;
+}
+export interface HeatmapParams extends HeatFilterParams {
+  mode: HeatMode;
+  unit: HeatUnit;
+  groupBy: HeatGroupBy;
+  count: number;
+}
+export interface HeatCellParams extends HeatFilterParams {
+  mode: HeatMode;
+  groupBy: HeatGroupBy;
+  shop: string;
+  job?: string;
+  from: string;
+  to: string;
+}
+
+function heatQuery(params: Record<string, string | number | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') q.set(k, String(v));
+  }
+  return q.toString();
+}
+
+export const getHeatmap = (p: HeatmapParams) => get<HeatmapResult>(`/api/heatmap?${heatQuery({ ...p })}`);
+export const getHeatmapCell = (p: HeatCellParams) => get<HeatCellDetail>(`/api/heatmap/cell?${heatQuery({ ...p })}`);
+export const getPartCongestion = (id: string) =>
+  get<PartCongestion>(`/api/heatmap/part/${encodeURIComponent(id)}`);
+
+export const getPartAdjust = (id: string) =>
+  get<AdjustSupport>(`/api/parts/${encodeURIComponent(id)}/adjust`);
 
 export const getMasters = () => get<MasterDef[]>('/api/masters');
 export const getMasterRows = (name: string) => get<Record<string, unknown>[]>(`/api/masters/${encodeURIComponent(name)}`);

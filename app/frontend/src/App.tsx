@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import type { Part, Meta } from './types';
 import type { Me, RecomputeResult } from './api';
 import { PartsList } from './components/PartsList';
+import { Heatmap } from './components/Heatmap';
 import { TroublesDashboard } from './components/TroublesDashboard';
 import { PartDetail } from './components/PartDetail';
 import { Masters } from './components/Masters';
@@ -36,12 +37,15 @@ function PartDetailRoute({
 }) {
   const { id: rawId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  let id: string | undefined;
-  try {
-    id = rawId ? decodeURIComponent(rawId) : undefined;
-  } catch {
-    return <Navigate to={routes.parts} replace />;
-  }
+  // 不正なURLエンコードでも早期 return せずフックの呼び出し順を保つ
+  const id = useMemo(() => {
+    if (!rawId) return undefined;
+    try {
+      return decodeURIComponent(rawId);
+    } catch {
+      return undefined;
+    }
+  }, [rawId]);
   const part = id ? parts.find((p) => p.id === id) : undefined;
   const { timelines, loading: tlLoading } = usePartTimelines(id ? [id] : []);
   const partWithTimeline = part ? mergePartTimeline(part, timelines) : undefined;
@@ -175,6 +179,17 @@ function AppLayout({
                         onTrouble={onTrouble}
                         onShelved={onShelved}
                         onMemo={onMemo}
+                      />
+                    }
+                  />
+                  <Route
+                    path={routes.heatmap}
+                    element={
+                      <Heatmap
+                        owners={(meta?.owners ?? []).filter((o) => o !== '未割当')}
+                        stagnantThreshold={meta?.stagnantThreshold ?? 10}
+                        defaultOwnerFilter={admin ? undefined : me.displayName}
+                        onOpenPart={openDetail}
                       />
                     }
                   />

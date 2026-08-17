@@ -9,7 +9,7 @@ import { loadMasters } from '../masters/masters.util';
 import { AuditService } from '../audit/audit.service';
 import type { RoutingRow } from './etl-routing.types';
 import type { Agg, EtlSummary, ShopMasterRow } from './etl-types';
-import { parseDateTime, parsePbsMonthEnd, parseSeq } from './etl-dates';
+import { parseDateTime, parseNum, parsePbsMonthEnd, parseSeq } from './etl-dates';
 import { batchInsert } from './etl-batch';
 import { deriveCategory } from './etl-category';
 import {
@@ -101,6 +101,7 @@ export class EtlService {
         planStart: parseDateTime(r['JIW(計算)']),
         planEnd: parseDateTime(r['JND(計算)']),
         actualEnd: parseDateTime(r['JND(実績)']),
+        hs: parseNum(r['Hs']),
         wip: clean(r['仕掛']) === '1',
         materialStatus: clean(r['払出状況']),
         outDate: parseDateTime(r['外注持出日']),
@@ -210,7 +211,7 @@ export class EtlService {
       let seqN = 0;
       for (const rr of [...agg.rows].sort((a, b) => a.seqMain - b.seqMain || a.seqSub - b.seqSub)) {
         seqN++;
-        routingRows.push([osId, seqN, rr.seqLabel, rr.shop, rr.job, rr.planStart, rr.planEnd, rr.actualEnd, rr.wip, rr.materialStatus, rr.outDate, rr.inDate, rr.etaDate, rr.reqDueDate, rr.orderNo]);
+        routingRows.push([osId, seqN, rr.seqLabel, rr.shop, rr.job, rr.planStart, rr.planEnd, rr.actualEnd, rr.hs, rr.wip, rr.materialStatus, rr.outDate, rr.inDate, rr.etaDate, rr.reqDueDate, rr.orderNo]);
       }
       assignRows.push([osId]);
     }
@@ -249,7 +250,7 @@ export class EtlService {
         await batchInsert(tx, 't_shop_master', ['shop', 'job', 'name', 'machine', 'source'], shopMasterRows,
           'ON CONFLICT (shop,job) DO UPDATE SET name=EXCLUDED.name, machine=EXCLUDED.machine, source=EXCLUDED.source');
         await batchInsert(tx, 't_part', ['os_id', 'part_no', 'part_name', 'category', 'kishu', 'final_due', 'pbs_due', 'oct_due', 'urgent_flag', 'shortage_flag'], partRows);
-        await batchInsert(tx, 't_routing', ['os_id', 'seq', 'seq_label', 'shop', 'job', 'plan_start', 'plan_end', 'actual_end', 'wip_flag', 'material_status', 'out_date', 'in_date', 'eta_date', 'req_due_date', 'order_no'], routingRows);
+        await batchInsert(tx, 't_routing', ['os_id', 'seq', 'seq_label', 'shop', 'job', 'plan_start', 'plan_end', 'actual_end', 'hs', 'wip_flag', 'material_status', 'out_date', 'in_date', 'eta_date', 'req_due_date', 'order_no'], routingRows);
         await batchInsert(tx, 't_part_status', ['os_id', 'part_no', 'part_name', 'category', 'kishu', 'final_due', 'total_shops', 'done_shops', 'remain_shops', 'current_shop', 'days_left', 'buffer', 'color', 'stagnant_days', 'urgent', 'shortage', 'computed_at'], statusRows);
         await batchInsert(tx, 't_timeline', ['os_id', 'seq', 'shop', 'name', 'status', 'plan_end', 'is_milestone', 'ms_passed', 'ms_color', 'ms_due', 'gaic', 'gaic_status', 'gaic_phase', 'order_no', 'out_date', 'in_date', 'eta_date', 'req_due_date'], timelineRows);
         await batchInsert(tx, 't_assignment', ['os_id'], assignRows, 'ON CONFLICT DO NOTHING');
@@ -380,6 +381,7 @@ export class EtlService {
         planStart: r.planStart ?? null,
         planEnd: r.planEnd ?? null,
         actualEnd: r.actualEnd ?? null,
+        hs: r.hs == null ? null : Number(r.hs),
         wip: !!r.wipFlag,
         materialStatus: r.materialStatus ?? '',
         outDate: r.outDate ?? null,

@@ -1,0 +1,38 @@
+/* 部品詳細：調整支援 */
+
+.adj-panel{margin-top:16px;}
+.adj-beta{font-size:12px;font-weight:700;color:var(--muted);}
+.adj-error{margin:0;color:var(--red);font-size:13px;}
+.adj-empty{margin:0;color:var(--muted);font-size:13px;}
+
+.adj-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;}
+@media(max-width:800px){.adj-kpis{grid-template-columns:1fr;}}
+
+.adj-kpi{
+  background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;
+  display:flex;flex-direction:column;gap:6px;
+}
+.adj-kpi-label{font-size:12px;color:var(--muted);}
+.adj-kpi strong{font-size:26px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums;}
+.adj-kpi-sub{font-size:11px;color:var(--muted);}
+.adj-num-late{color:var(--red);}
+.adj-num-ok{color:var(--green);}
+
+.adj-alert{border-radius:10px;padding:10px 14px;font-size:13px;line-height:1.6;margin-bottom:14px;}
+.adj-alert-late{background:var(--red-bg);color:#8a2a2a;border:1px solid var(--red-soft);}
+.adj-alert-ok{background:var(--green-bg);color:#1a6b48;border:1px solid var(--green-soft);}
+
+.adj-table-wrap{overflow:auto;}
+.adj-table{width:100%;}
+.adj-table thead th{white-space:nowrap;}
+.adj-table th.num,.adj-table td.num{text-align:right;font-variant-numeric:tabular-nums;}
+.adj-table tbody tr{cursor:default;}
+.adj-table tbody tr:hover{background:transparent;}
+.adj-proc{font-weight:600;}
+.adj-shop{font-size:11px;color:var(--muted);font-family:monospace;}
+.adj-diff{font-weight:700;}
+.adj-diff-gain{color:var(--green);}
+.adj-diff-loss{color:var(--red);}
+.adj-diff-flat{color:var(--green);}
+
+.adj-note{margin:12px 0 0;font-size:11px;color:var(--muted);line-height:1.7;}

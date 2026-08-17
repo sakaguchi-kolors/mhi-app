@@ -9,6 +9,8 @@ export interface RoutingRow {
   planStart: Date | null;
   planEnd: Date | null;
   actualEnd: Date | null;
+  /** 標準時間(Hs, 時間)。正味作業時間であってリードタイムではない */
+  hs: number | null;
   wip: boolean;
   materialStatus: string;
   outDate: Date | null;

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   useReactTable, getCoreRowModel, getSortedRowModel, getPaginationRowModel, flexRender,
   type ColumnDef, type SortingState, type PaginationState,
@@ -31,6 +32,9 @@ interface Props {
 }
 
 export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaultOwnerFilter, onAutoAssign, onOpen, onOwner, onTrouble, onShelved, onMemo }: Props) {
+  // ヒートマップの工程クリックから ?shop=xxxx で遷移してくる
+  const [searchParams, setSearchParams] = useSearchParams();
+  const shopParam = searchParams.get('shop') ?? '';
   const {
     filter,
     query,
@@ -51,7 +55,8 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
     kishus,
     ownerOpts,
     kpi,
-  } = usePartsFilter(parts, stagnantThreshold, defaultOwnerFilter);
+    shop,
+  } = usePartsFilter(parts, stagnantThreshold, defaultOwnerFilter, shopParam);
   const [sorting, setSorting] = useState<SortingState>([{ id: 'sev', desc: false }]);
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 30 });
   const [memoFor, setMemoFor] = useState<Part | null>(null);
@@ -61,7 +66,7 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
   const pageIndex = pagination.pageIndex;
   const pageSize = pagination.pageSize;
 
-  useEffect(() => { setPagination((p) => ({ ...p, pageIndex: 0 })); }, [filter, query, cat, owner, kishu, showShelved]);
+  useEffect(() => { setPagination((p) => ({ ...p, pageIndex: 0 })); }, [filter, query, cat, owner, kishu, showShelved, shop]);
 
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const { timelines } = usePartTimelines(visibleIds);
@@ -212,8 +217,24 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
   const to = Math.min((pageIndex + 1) * pageSize, total);
 
 
+  const shopLabel = shop ? filtered[0]?.currentShop || parts.find((p) => p.currentShopCode === shop)?.currentShop : '';
+
   return (
     <section>
+      {shop && (
+        <div className="shop-filter-bar">
+          工程で絞り込み中：<b>{shop}</b>
+          {shopLabel && <span className="shop-filter-name">{shopLabel}</span>}
+          <span className="shop-filter-note">この工程に現在滞在している部品 {filtered.length}件</span>
+          <button
+            type="button"
+            className="chip"
+            onClick={() => setSearchParams({}, { replace: true })}
+          >
+            解除
+          </button>
+        </div>
+      )}
       <PartsListKpi kpi={kpi} filter={filter} stagnantThreshold={stagnantThreshold} onToggle={toggleFilter} />
       <PartsListToolbar
         filter={filter}

@@ -13,10 +13,9 @@ async function main(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn', 'log'] });
   const prisma = app.get(PrismaService);
 
-  if ((await prisma.param.count()) === 0) {
-    await prisma.param.createMany({ data: DEFAULT_PARAMS });
-    console.log(`[seed] m_param seeded: ${DEFAULT_PARAMS.length}`);
-  }
+  // 既存環境にも新しいキーだけを足せるよう、常に不足分を補う（既存値は上書きしない）
+  const addedParams = await prisma.param.createMany({ data: DEFAULT_PARAMS, skipDuplicates: true });
+  if (addedParams.count > 0) console.log(`[seed] m_param seeded: ${addedParams.count}`);
 
   if ((await prisma.milestone.count()) === 0) {
     const shopJobs = await prisma.shopMaster.findMany({ select: { shop: true, job: true, name: true } });

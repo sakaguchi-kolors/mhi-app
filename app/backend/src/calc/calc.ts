@@ -265,6 +265,7 @@ export function computePart(
     urgent: meta.urgent,
     shortage: meta.shortage,
     currentShop,
+    currentShopCode: currentCell?.shop ?? '',
     timeline,
     inst: meta.osId.replace(/\D/g, '').slice(-4),
   };

@@ -3,7 +3,7 @@ import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { PartsService } from './parts.service';
 import { appUser } from '../common/app-user';
-import type { Part } from '../common/types';
+import type { AdjustSupport, Part } from '../common/types';
 
 const MAX_TEXT_LEN = 2000;
 
@@ -28,6 +28,12 @@ export class PartsController {
       throw new BadRequestException('一度に取得できるのは500件までです');
     }
     return this.parts.buildTimelinesForIds(list);
+  }
+
+  @Get(':id/adjust')
+  @ApiOperation({ summary: '部品詳細の調整支援（現行想定LTとHsベースLTの比較）' })
+  async adjust(@Param('id') id: string): Promise<AdjustSupport> {
+    return this.parts.getAdjustSupport(id);
   }
 
   @Post(':id/owner')
