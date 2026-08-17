@@ -1,6 +1,7 @@
 // 部品詳細の後続SHOP混雑（純関数・DB非依存）。
 // 全社ヒートマップとは別に、この部品がこれから通る工程だけを並べる。
 import type { Color, CongestionLevel, PartCongestion, PartCongestionBatting, PartCongestionStep } from '../shared/types';
+import { dayIndex } from './heatmap.logic';
 
 export const CONGESTION_YELLOW = 30;
 export const CONGESTION_RED = 50;
@@ -16,11 +17,12 @@ export interface CongestionPartInput {
   shop: string;
   color: Color;
   buffer: number;
+  daysLeft: number;
   partNo: string;
   name: string;
+  planStart?: Date | null;
+  planEnd?: Date | null;
 }
-
-const COLOR_RANK: Record<Color, number> = { red: 0, yellow: 1, green: 2 };
 
 export function congestionLevel(count: number, yellowAt = CONGESTION_YELLOW, redAt = CONGESTION_RED): CongestionLevel {
   if (count >= redAt) return 'red';
@@ -45,14 +47,46 @@ function toBatting(p: CongestionPartInput): PartCongestionBatting {
     name: p.name,
     color: p.color,
     buffer: p.buffer,
+    daysLeft: p.daysLeft,
   };
 }
 
-/** 赤 → 黄 → 緑、同色ならバッファが小さい順 */
+function earlier(a: Date | null | undefined, b: Date | null | undefined): Date | null {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return a <= b ? a : b;
+}
+
+function later(a: Date | null | undefined, b: Date | null | undefined): Date | null {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return a >= b ? a : b;
+}
+
+/** 着手〜完了。片方しか無いときはその1日。どちらも無いときは null */
+export function planSpan(start?: Date | null, end?: Date | null): [number, number] | null {
+  const a = start ?? end;
+  const b = end ?? start;
+  if (!a || !b) return null;
+  const i = dayIndex(a);
+  const j = dayIndex(b);
+  return i <= j ? [i, j] : [j, i];
+}
+
+/** 1日でも重なれば true。日付が欠けている側はバッティングにしない */
+export function plansOverlap(
+  a: Pick<CongestionPartInput, 'planStart' | 'planEnd'>,
+  b: Pick<CongestionPartInput, 'planStart' | 'planEnd'>,
+): boolean {
+  const sa = planSpan(a.planStart, a.planEnd);
+  const sb = planSpan(b.planStart, b.planEnd);
+  if (!sa || !sb) return false;
+  return sa[0] <= sb[1] && sb[0] <= sa[1];
+}
+
+/** 納期までの残日数が多い順（後ろに回しやすい部品が上） */
 export function sortBatting(parts: CongestionPartInput[]): CongestionPartInput[] {
-  return [...parts].sort(
-    (a, b) => COLOR_RANK[a.color] - COLOR_RANK[b.color] || a.buffer - b.buffer || a.osId.localeCompare(b.osId),
-  );
+  return [...parts].sort((a, b) => b.daysLeft - a.daysLeft || b.buffer - a.buffer || a.osId.localeCompare(b.osId));
 }
 
 export function buildPartCongestion(input: {
@@ -75,7 +109,13 @@ export function buildPartCongestion(input: {
       m = new Map();
       byShop.set(p.shop, m);
     }
-    if (!m.has(p.osId)) m.set(p.osId, p);
+    const cur = m.get(p.osId);
+    if (!cur) {
+      m.set(p.osId, { ...p });
+      continue;
+    }
+    cur.planStart = earlier(cur.planStart, p.planStart);
+    cur.planEnd = later(cur.planEnd, p.planEnd);
   }
 
   const seen = new Set<string>();
@@ -88,9 +128,12 @@ export function buildPartCongestion(input: {
     const red = all.filter((p) => p.color === 'red').length;
     const yellow = all.filter((p) => p.color === 'yellow').length;
     const green = started - red - yellow;
-    const others = sortBatting(all.filter((p) => p.osId !== input.osId));
+    const self = all.find((p) => p.osId === input.osId);
+    const others = sortBatting(
+      all.filter((p) => p.osId !== input.osId && self != null && plansOverlap(self, p)),
+    );
     const batting = others.slice(0, battingLimit).map(toBatting);
-    const battingRedMore = Math.max(0, others.filter((p) => p.color === 'red').length - batting.filter((p) => p.color === 'red').length);
+    const battingMore = Math.max(0, others.length - batting.length);
 
     steps.push({
       step: steps.length + 1,
@@ -105,7 +148,7 @@ export function buildPartCongestion(input: {
       greenPct: colorPct(green, started),
       level: congestionLevel(started, yellowAt, redAt),
       batting,
-      battingRedMore,
+      battingMore,
     });
   }
 

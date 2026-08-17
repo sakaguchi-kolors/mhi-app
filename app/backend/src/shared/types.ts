@@ -385,6 +385,8 @@ export interface PartCongestionBatting {
   name: string;
   color: Color;
   buffer: number;
+  /** 基準日→依頼納期の残日数。多いほど後ろに回しやすい */
+  daysLeft: number;
 }
 
 export interface PartCongestionStep {
@@ -400,10 +402,10 @@ export interface PartCongestionStep {
   yellowPct: number;
   greenPct: number;
   level: CongestionLevel;
-  /** 優先度の高いバッティング候補（自分以外） */
+  /** 期間が重なる部品のうち、残日数が多い順（後ろに回しやすい順） */
   batting: PartCongestionBatting[];
-  /** リストに出し切らなかった赤の件数 */
-  battingRedMore: number;
+  /** リストに出し切らなかった件数 */
+  battingMore: number;
 }
 
 export interface PartCongestion {

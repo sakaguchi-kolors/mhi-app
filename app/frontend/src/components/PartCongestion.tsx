@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import * as api from '../api';
 import type { PartCongestionStep } from '../types';
 import { routes } from '../routes';
-import { barShares, COLOR_LABEL, levelLabel } from '../lib/congestion.view';
+import { barShares, levelLabel } from '../lib/congestion.view';
 import { Loading } from './Loading';
 
 export function PartCongestion({ osId }: { osId: string }) {
@@ -40,7 +40,7 @@ export function PartCongestion({ osId }: { osId: string }) {
           </div>
           <p className="cong-note">
             ※ 着手数は、そのSHOPをまだ通る未完了部品の件数です。カードの色は件数（緑{data.thresholds.yellow}件未満／黄{data.thresholds.yellow}〜{data.thresholds.red - 1}件／赤{data.thresholds.red}件以上）です。
-            バッティング候補は自分以外を緊急度・バッファ順に最大4件出しています。
+            バッティング候補は、計画期間が1日でも重なる部品を、納期までの残日数が多い順（後ろに回しやすい順）に最大4件出しています。
           </p>
         </>
       )}
@@ -99,7 +99,7 @@ function CongestionCard({ step }: { step: PartCongestionStep }) {
       <div className="cong-batting">
         <h5>バッティング候補部品</h5>
         {step.batting.length === 0 ? (
-          <p className="cong-batting-empty">他に競合する部品はありません。</p>
+          <p className="cong-batting-empty">期間が重なる部品はありません。</p>
         ) : (
           <ul>
             {step.batting.map((p) => (
@@ -109,14 +109,14 @@ function CongestionCard({ step }: { step: PartCongestionStep }) {
                     <span className="cong-batting-no">{p.partNo}</span>
                     <span className="cong-batting-name">{p.name || '（名称なし）'}</span>
                   </span>
-                  <span className={`cong-prio ${p.color}`}>推奨度 {COLOR_LABEL[p.color]}</span>
+                  <span className={`cong-prio ${p.color}`}>残{p.daysLeft}日</span>
                 </button>
               </li>
             ))}
           </ul>
         )}
-        {step.battingRedMore > 0 && (
-          <p className="cong-batting-more">他に優先度・赤が {step.battingRedMore}件あります。</p>
+        {step.battingMore > 0 && (
+          <p className="cong-batting-more">他に期間が重なる部品が {step.battingMore}件あります。</p>
         )}
       </div>
     </article>

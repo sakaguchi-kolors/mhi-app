@@ -204,13 +204,13 @@ export class HeatmapService {
 
     const routing = await this.prisma.routing.findMany({
       where: { shop: { in: shops }, actualEnd: null },
-      select: { osId: true, shop: true },
+        select: { osId: true, shop: true, planStart: true, planEnd: true },
     });
     const osIds = [...new Set(routing.map((r) => r.osId))];
     const status = osIds.length
       ? await this.prisma.partStatus.findMany({
           where: { osId: { in: osIds } },
-          select: { osId: true, partNo: true, partName: true, color: true, buffer: true },
+          select: { osId: true, partNo: true, partName: true, color: true, buffer: true, daysLeft: true },
         })
       : [];
     const statusMap = new Map(status.map((s) => [s.osId, s]));
@@ -225,8 +225,11 @@ export class HeatmapService {
           shop: r.shop ?? '',
           color: toColor(s?.color),
           buffer: s?.buffer ?? 0,
+          daysLeft: s?.daysLeft ?? 0,
           partNo: s?.partNo ?? '',
           name: s?.partName ?? '',
+          planStart: r.planStart,
+          planEnd: r.planEnd,
         };
       }),
     });
