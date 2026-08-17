@@ -5,6 +5,7 @@ param(
   [switch]$SkipBasicAuth,
   [switch]$InstallGit,
   [string]$RepoUrl = '',
+  [string]$GitBranch = '',
   [string]$AppRoot = 'C:\apps\mhi-app',
   [string]$SiteRoot = 'C:\inetpub\mhi',
   [string]$SiteName = 'MhiApp',
@@ -166,7 +167,16 @@ New-Item -ItemType Directory -Path 'C:\apps\mhi-app\data\csv' -Force | Out-Null
 
 if ($RepoUrl -and -not (Test-Path (Join-Path $AppRoot '.git'))) {
   Write-Step "Cloning repo: $RepoUrl"
-  git clone $RepoUrl $AppRoot
+  if ($GitBranch) {
+    git clone --branch $GitBranch $RepoUrl $AppRoot
+  } else {
+    git clone $RepoUrl $AppRoot
+  }
+} elseif ($GitBranch -and (Test-Path (Join-Path $AppRoot '.git'))) {
+  Write-Step "Checking out branch: $GitBranch"
+  git -C $AppRoot fetch origin
+  git -C $AppRoot checkout $GitBranch
+  git -C $AppRoot pull origin $GitBranch
 }
 
 $appDir = Join-Path $AppRoot 'app'

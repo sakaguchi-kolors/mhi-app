@@ -2,6 +2,7 @@
 param(
   [switch]$FirstRun,
   [switch]$GitPull,
+  [string]$GitBranch = '',
   [switch]$DryRun,
   [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
   [string]$SiteRoot = 'C:\inetpub\mhi',
@@ -58,9 +59,15 @@ if ($SiteRoot -notlike 'C:\inetpub\*') {
 if ($GitPull) {
   $gitRoot = Split-Path $RepoRoot -Parent
   if (Test-Path (Join-Path $gitRoot '.git')) {
-    Invoke-DeployStep 'git pull' {
+    Invoke-DeployStep $(if ($GitBranch) { "git fetch + checkout $GitBranch" } else { 'git pull' }) {
       Push-Location $gitRoot
-      Invoke-Native { git pull }
+      Invoke-Native { git fetch origin }
+      if ($GitBranch) {
+        Invoke-Native { git checkout $GitBranch }
+        Invoke-Native { git pull origin $GitBranch }
+      } else {
+        Invoke-Native { git pull }
+      }
       Pop-Location
     }
   } else {
