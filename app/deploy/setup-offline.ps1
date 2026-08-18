@@ -28,6 +28,12 @@ function New-RandomPassword {
   return [Convert]::ToBase64String($bytes).Substring(0, $Length) -replace '[+/=]', 'x'
 }
 
+function New-JwtSecret {
+  $bytes = New-Object byte[] 32
+  [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+  return [Convert]::ToBase64String($bytes)
+}
+
 function Write-Utf8NoBom([string]$Path, [string]$Content) {
   $utf8 = New-Object System.Text.UTF8Encoding $false
   [System.IO.File]::WriteAllText($Path, $Content, $utf8)
@@ -223,15 +229,17 @@ if (-not $SkipPostgresInstall) {
   } else {
     Write-Step 'PostgreSQL 18 (local installer)'
     $pgExe = Get-Installer $installers 'postgresql-18*.exe'
+    # BitRock installer wants space-separated flags (not --key=value).
+    # Quote paths with spaces in one ArgumentList string for Start-Process.
     $pgArgs = @(
-      '--mode', 'unattended',
-      '--unattendedmodeui', 'none',
-      '--superpassword', $PgPassword,
-      '--servicename', 'postgresql-x64-18',
-      '--serverport', '5432',
-      '--disable-components', 'pgAdmin,stackbuilder',
-      '--prefix', 'C:\Program Files\PostgreSQL\18'
-    )
+      '--mode unattended',
+      '--unattendedmodeui none',
+      "--superpassword $PgPassword",
+      '--servicename postgresql-x64-18',
+      '--serverport 5432',
+      '--disable-components pgAdmin,stackbuilder',
+      '--prefix "C:\Program Files\PostgreSQL\18"'
+    ) -join ' '
     $p = Start-Process $pgExe -ArgumentList $pgArgs -Wait -PassThru
     if ($p.ExitCode -ne 0) { throw "PostgreSQL installer failed: $($p.ExitCode)" }
     Start-Sleep -Seconds 5
@@ -280,7 +288,7 @@ $envTarget = Join-Path $appDir 'backend\.env'
 if (-not (Test-Path $envTarget)) {
   if (-not (Test-Path $envExample)) { throw ".env.staging.example not found: $envExample" }
   Copy-Item $envExample $envTarget
-  $jwt = New-RandomPassword
+  $jwt = New-JwtSecret
   $dbUrl = "postgresql://mop:${PgPassword}@localhost:5432/mop?schema=public"
   $envContent = (Get-Content $envTarget -Raw) `
     -replace 'JWT_SECRET=.*', "JWT_SECRET=$jwt" `
@@ -290,20 +298,20 @@ if (-not (Test-Path $envTarget)) {
   Write-Host "  Created: $envTarget"
 }
 
-if (-not $SkipPostgresInstall) {
-  Write-Step 'Creating PostgreSQL database'
-  $pgBin = Get-PgBinPath
-  if (-not $pgBin) { throw 'PostgreSQL bin directory not found' }
-  $psql = Join-Path $pgBin 'psql.exe'
-  $env:PGPASSWORD = $PgPassword
-  $roleSql = "DO `$`$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'mop') THEN CREATE ROLE mop LOGIN PASSWORD '$PgPassword'; END IF; END `$`$;"
-  & $psql -U postgres -h localhost -c $roleSql
-  $dbCheck = & $psql -U postgres -h localhost -tc "SELECT 1 FROM pg_database WHERE datname = 'mop'"
-  if ($dbCheck.Trim() -ne '1') {
-    & $psql -U postgres -h localhost -c 'CREATE DATABASE mop OWNER mop;'
-  }
-  Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+Write-Step 'Creating PostgreSQL database'
+$pgBin = Get-PgBinPath
+if (-not $pgBin) { throw 'PostgreSQL bin directory not found' }
+$psql = Join-Path $pgBin 'psql.exe'
+$env:PGPASSWORD = $PgPassword
+$roleSql = "DO `$`$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'mop') THEN CREATE ROLE mop LOGIN PASSWORD '$PgPassword'; END IF; END `$`$;"
+& $psql -U postgres -h localhost -c $roleSql
+if ($LASTEXITCODE -ne 0) { throw 'Failed to create PostgreSQL role mop' }
+$dbCheck = & $psql -U postgres -h localhost -tc "SELECT 1 FROM pg_database WHERE datname = 'mop'"
+if ($dbCheck.Trim() -ne '1') {
+  & $psql -U postgres -h localhost -c 'CREATE DATABASE mop OWNER mop;'
+  if ($LASTEXITCODE -ne 0) { throw 'Failed to create PostgreSQL database mop' }
 }
+Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
 
 Write-Step 'Registering Windows Service'
 $backend = Join-Path $appDir 'backend'
