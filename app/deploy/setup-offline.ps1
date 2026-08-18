@@ -278,8 +278,36 @@ if (-not (Test-Path $appDir)) { throw "app/ not found: $appDir" }
 
 $sampleCsv = Join-Path $appDir 'sample-data'
 $csvDir = Join-Path $AppRoot 'data\csv'
-if ((Test-Path $sampleCsv) -and -not (Get-ChildItem $csvDir -ErrorAction SilentlyContinue)) {
-  Copy-Item -Path (Join-Path $sampleCsv '*') -Destination $csvDir -Force
+$requiredCsv = @(
+  @{ Dest = 'FLEXSCHE結果出力5(残工程数見直し).csv'; Pattern = 'FLEXSCHE*.csv' },
+  @{ Dest = 'OCTPuS工程実績.csv'; Pattern = 'OCTPuS*.csv' },
+  @{ Dest = 'PBS部品計画納期リスト.csv'; Pattern = 'PBS*.csv' },
+  @{ Dest = 'SHOP_JOBマスタ.csv'; Pattern = 'SHOP_JOB*.csv' }
+)
+$kitCsv = Join-Path $KitRoot 'csv-for-aws'
+$csvSources = @($sampleCsv, $kitCsv) | Where-Object { Test-Path $_ }
+foreach ($entry in $requiredCsv) {
+  $name = $entry.Dest
+  $dest = Join-Path $csvDir $name
+  if (Test-Path $dest) { continue }
+  $copied = $false
+  foreach ($srcDir in $csvSources) {
+    $src = Join-Path $srcDir $name
+    if (Test-Path $src) {
+      Copy-Item $src $dest -Force
+      $copied = $true
+      break
+    }
+    $glob = Get-ChildItem -Path (Join-Path $srcDir $entry.Pattern) -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($glob) {
+      Copy-Item $glob.FullName $dest -Force
+      $copied = $true
+      break
+    }
+  }
+  if (-not $copied) {
+    throw "CSV missing: $name (place files in app\sample-data or kit\csv-for-aws before setup)"
+  }
 }
 
 Write-Step 'Creating backend/.env'

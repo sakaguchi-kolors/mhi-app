@@ -168,6 +168,35 @@ $roboArgs = @($repoRoot, $staging, '/E', '/XD') + $xd + @('/XF', '.env', '/NFL',
 & robocopy @roboArgs | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed ($LASTEXITCODE)" }
 
+$requiredCsv = @(
+  @{ Dest = 'FLEXSCHE結果出力5(残工程数見直し).csv'; Pattern = 'FLEXSCHE*.csv' },
+  @{ Dest = 'OCTPuS工程実績.csv'; Pattern = 'OCTPuS*.csv' },
+  @{ Dest = 'PBS部品計画納期リスト.csv'; Pattern = 'PBS*.csv' },
+  @{ Dest = 'SHOP_JOBマスタ.csv'; Pattern = 'SHOP_JOB*.csv' }
+)
+$csvSources = @(
+  (Join-Path $repoRoot 'app\sample-data'),
+  (Join-Path $OutDir 'csv-for-aws')
+)
+$kitCsv = Join-Path $kitRoot 'csv-for-aws'
+New-Item -ItemType Directory -Path $kitCsv -Force | Out-Null
+foreach ($entry in $requiredCsv) {
+  $name = $entry.Dest
+  $found = $null
+  foreach ($dir in $csvSources) {
+    if (-not (Test-Path $dir)) { continue }
+    $p = Join-Path $dir $name
+    if (Test-Path $p) { $found = $p; break }
+    $glob = Get-ChildItem -Path (Join-Path $dir $entry.Pattern) -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($glob) { $found = $glob.FullName; break }
+  }
+  if (-not $found) {
+    throw "CSV missing for offline kit: $name`nPlace files in app\sample-data or dist-release\csv-for-aws on build machine."
+  }
+  Copy-Item $found (Join-Path $kitCsv $name) -Force
+  Copy-Item $found (Join-Path (Join-Path $staging 'app\sample-data') $name) -Force
+}
+
 $meta = @(
   "version=$Version"
   "kind=offline"
