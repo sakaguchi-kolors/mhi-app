@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 #Requires -Version 5.1
 # インターネット不要の初回構築。キット同梱のインストーラと完成品を使う。
 # Chocolatey / npm ci / prisma generate は行わない。

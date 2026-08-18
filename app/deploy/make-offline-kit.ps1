@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # 先方がインターネットに出られない前提のオフラインキットを作る。
 # 必ず Windows（ビルド用 EC2）で実行すること。Mac では Windows 用 Prisma エンジンが作れない。
 #
@@ -66,8 +66,8 @@ function Refresh-Path {
     [System.Environment]::GetEnvironmentVariable('Path', 'User')
 }
 
-if ($IsLinux -or $IsMacOS) {
-  throw 'make-offline-kit.ps1 は Windows で実行してください（ビルド用 EC2）。'
+if ($PSVersionTable.PSEdition -eq 'Core' -and -not $IsWindows) {
+  throw 'make-offline-kit.ps1 must run on Windows (build EC2).'
 }
 
 New-Item -ItemType Directory -Path $installers -Force | Out-Null
