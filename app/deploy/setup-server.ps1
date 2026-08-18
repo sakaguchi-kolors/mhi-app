@@ -91,12 +91,61 @@ function Ensure-PostgresInstalled {
   }
 }
 
+function Test-ServerCore {
+  try {
+    $type = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').InstallationType
+    return $type -eq 'Server Core'
+  } catch {
+    return $false
+  }
+}
+
+function Install-WindowsFeatureSafe {
+  param(
+    [string[]]$Names,
+    [switch]$IncludeManagementTools,
+    [switch]$Required
+  )
+  $toInstall = @()
+  foreach ($name in $Names) {
+    $f = Get-WindowsFeature -Name $name -ErrorAction SilentlyContinue
+    if (-not $f) {
+      Write-Host "  skip (not in this SKU): $name"
+      continue
+    }
+    if ($f.Installed) { continue }
+    if ("$($f.InstallState)" -eq 'Removed') {
+      Write-Host "  skip (not in image): $name"
+      continue
+    }
+    $toInstall += $name
+  }
+  if ($toInstall.Count -eq 0) { return }
+  $params = @{ Name = $toInstall }
+  if ($IncludeManagementTools) { $params.IncludeManagementTools = $true }
+  $result = Install-WindowsFeature @params
+  if ($Required -and -not $result.Success) {
+    throw "IIS feature install failed: $($toInstall -join ', ')"
+  }
+  if (-not $result.Success) {
+    Write-Host "  optional features not installed: $($toInstall -join ', ')" -ForegroundColor Yellow
+  }
+}
+
 function Install-IisModules {
   Write-Step 'Enabling IIS'
-  Install-WindowsFeature -Name Web-Server, Web-WebServer, Web-Common-Http, Web-Static-Content,
-    Web-Default-Doc, Web-Dir-Browsing, Web-Http-Errors, Web-Http-Logging, Web-Request-Monitor,
-    Web-Filtering, Web-Stat-Compression, Web-Mgmt-Tools, Web-Mgmt-Console,
-    Web-Basic-Auth, Web-Windows-Auth -IncludeManagementTools | Out-Null
+  $worker = @(
+    'Web-Server', 'Web-WebServer', 'Web-Common-Http', 'Web-Static-Content',
+    'Web-Default-Doc', 'Web-Dir-Browsing', 'Web-Http-Errors', 'Web-Http-Logging',
+    'Web-Request-Monitor', 'Web-Filtering', 'Web-Stat-Compression',
+    'Web-Basic-Auth', 'Web-Windows-Auth'
+  )
+  Install-WindowsFeatureSafe -Names $worker -Required
+  if (Test-ServerCore) {
+    Write-Host '  Server Core: IIS Manager (GUI) は入れません。画面確認は別 PC のブラウザから。'
+  } else {
+    Install-WindowsFeatureSafe -Names @('Web-Mgmt-Tools', 'Web-Mgmt-Console') -IncludeManagementTools
+  }
 
   Import-Module WebAdministration -ErrorAction SilentlyContinue
 

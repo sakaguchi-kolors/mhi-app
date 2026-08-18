@@ -191,7 +191,8 @@ app/
 | [app/README.md](README.md) | 環境構築・API一覧・設定 |
 | [doc/技術選定.md](../doc/技術選定.md) | 採用技術・選定理由 |
 | [doc/データベース.md](../doc/データベース.md) | テーブル群・データフロー |
-| [doc/WindowsServerデプロイ手順.md](../doc/WindowsServerデプロイ手順.md) | 本番デプロイ |
+| [doc/WindowsServerデプロイ手順.md](../doc/WindowsServerデプロイ手順.md) | 本番デプロイ（インターネットあり） |
+| [doc/オフライン構築手順.md](../doc/オフライン構築手順.md) | 先方（外通信不可）向けオフラインキット |
 | [moc/mop-app-handoff/](../moc/mop-app-handoff/) | **参照専用**の旧プロトタイプ（Express版） |
 
 ---

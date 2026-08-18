@@ -2,6 +2,7 @@
 param(
   [switch]$FirstRun,
   [switch]$GitPull,
+  [switch]$SkipNpm,
   [switch]$DryRun,
   [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
   [string]$SiteRoot = 'C:\inetpub\mhi',
@@ -47,6 +48,7 @@ function Invoke-DeployStep([string]$Message, [scriptblock]$Action) {
 Write-Step 'Deploy started'
 Write-Host "RepoRoot : $RepoRoot"
 Write-Host "SiteRoot : $SiteRoot"
+if ($SkipNpm) { Write-Host 'Mode     : SkipNpm (use prebuilt node_modules / dist)' -ForegroundColor Yellow }
 if ($DryRun) { Write-Host 'Mode     : DryRun (no changes will be made)' -ForegroundColor Yellow }
 
 if ($SiteRoot -notlike 'C:\inetpub\*') {
@@ -87,19 +89,27 @@ if (Test-ServiceExists $ServiceName) {
   }
 }
 
-Invoke-DeployStep 'backend: npm ci && build' {
-  Push-Location $backend
-  Invoke-Native { npm ci }
-  Invoke-Native { npm run prisma:generate }
-  Invoke-Native { npm run build }
-  Pop-Location
-}
+if ($SkipNpm) {
+  $backendMain = Join-Path $backend 'dist\main.js'
+  $frontendIndex = Join-Path $frontend 'dist\index.html'
+  if (-not (Test-Path $backendMain)) { throw "SkipNpm: backend dist missing: $backendMain" }
+  if (-not (Test-Path $frontendIndex)) { throw "SkipNpm: frontend dist missing: $frontendIndex" }
+  Write-Host '  SkipNpm: npm ci / build は行いません（キット同梱の完成品を使います）' -ForegroundColor DarkGray
+} else {
+  Invoke-DeployStep 'backend: npm ci && build' {
+    Push-Location $backend
+    Invoke-Native { npm ci }
+    Invoke-Native { npm run prisma:generate }
+    Invoke-Native { npm run build }
+    Pop-Location
+  }
 
-Invoke-DeployStep 'frontend: npm ci && build' {
-  Push-Location $frontend
-  Invoke-Native { npm ci }
-  Invoke-Native { npm run build }
-  Pop-Location
+  Invoke-DeployStep 'frontend: npm ci && build' {
+    Push-Location $frontend
+    Invoke-Native { npm ci }
+    Invoke-Native { npm run build }
+    Pop-Location
+  }
 }
 
 Invoke-DeployStep 'backend: prisma migrate deploy' {
