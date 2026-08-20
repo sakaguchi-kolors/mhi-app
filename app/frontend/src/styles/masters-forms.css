@@ -27,6 +27,7 @@
   .param-effect{margin:0 0 8px;font-size:12px;color:var(--text);line-height:1.5;}
   .param-effect::before{content:'→ ';color:var(--info);font-weight:700;}
   .param-inline{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .param-inline .mbtn.save:disabled{opacity:.45;cursor:not-allowed;}
   .param-inline input[type=number],.param-inline input[type=text],.param-inline select,
   .rule-row input[type=text],.rule-row select,.test-box input[type=text]{
     border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px;font-family:inherit;

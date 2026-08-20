@@ -119,10 +119,12 @@ Invoke-DeployStep 'backend: prisma migrate deploy' {
 }
 
 if ($FirstRun) {
-  Invoke-DeployStep 'First run: seed + etl' {
+  Invoke-DeployStep 'First run: etl + seed + recompute' {
     Push-Location $backend
-    Invoke-Native { npm run seed }
+    # ETL で SHOP_JOB を取込してから seed（m_milestone ◎ 投入に必要）
     Invoke-Native { npm run etl }
+    Invoke-Native { npm run seed }
+    Invoke-Native { npm run recompute }
     Pop-Location
   }
 }

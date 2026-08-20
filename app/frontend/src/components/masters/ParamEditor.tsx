@@ -42,8 +42,10 @@ export function ParamEditor({ rows, parts, onSave }: Props) {
 
   const saveKey = async (key: string) => {
     const row = byKey.get(key);
-    if (!row) return;
-    await onSave({ ...row, value: val(key) });
+    const ok = await onSave(
+      row ? { ...row, value: val(key) } : { key, value: val(key), description: desc(key) },
+    );
+    if (!ok) return;
     setDraft((p) => {
       const n = { ...p };
       delete n[key];
@@ -114,6 +116,9 @@ export function ParamEditor({ rows, parts, onSave }: Props) {
             type="button"
             className="mbtn save"
             disabled={!dirty('BUFFER_GREEN') && !dirty('BUFFER_YELLOW')}
+            title={
+              dirty('BUFFER_GREEN') || dirty('BUFFER_YELLOW') ? undefined : '閾値を変更すると保存できます'
+            }
             onClick={async () => {
               if (dirty('BUFFER_GREEN')) await saveKey('BUFFER_GREEN');
               if (dirty('BUFFER_YELLOW')) await saveKey('BUFFER_YELLOW');
@@ -218,7 +223,13 @@ function ParamField({
       <div className="param-inline">
         <input type="number" value={value} onChange={(e) => onChange(e.target.value)} />
         <span>{unit}</span>
-        <button type="button" className="mbtn save" disabled={!dirty} onClick={onSave}>
+        <button
+          type="button"
+          className="mbtn save"
+          disabled={!dirty}
+          title={dirty ? undefined : '値を変更すると保存できます'}
+          onClick={onSave}
+        >
           保存
         </button>
       </div>

@@ -148,7 +148,8 @@ cd C:\apps\mhi-app\app\deploy
 | `.env` 生成 | JWT_SECRET 自動生成 |
 | Windows Service | `MhiProgressApi` 登録 |
 | IIS サイト | `MhiApp`（port 80） |
-| 初回デプロイ | build + migrate + seed + etl |
+| 初回デプロイ | build + migrate + etl + seed + recompute |
+| 初回のみ追加（20260818 キット） | `ensure-m-param.ps1` + seed + recompute（`setup-offline` 直後。§4-5 参照） |
 
 Git は**インストールしません**（先方運用では不要）。
 

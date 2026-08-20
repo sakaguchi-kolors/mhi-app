@@ -13,9 +13,10 @@ async function main(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn', 'log'] });
   const prisma = app.get(PrismaService);
 
-  if ((await prisma.param.count()) === 0) {
-    await prisma.param.createMany({ data: DEFAULT_PARAMS });
-    console.log(`[seed] m_param seeded: ${DEFAULT_PARAMS.length}`);
+  // ETL 取込で AS_OF 等が先に入ると count>0 になり、旧ロジックでは SHOP_LT_DAYS 等が欠落する
+  const ensured = await prisma.param.createMany({ data: DEFAULT_PARAMS, skipDuplicates: true });
+  if (ensured.count > 0) {
+    console.log(`[seed] m_param ensured: +${ensured.count} / ${DEFAULT_PARAMS.length} keys`);
   }
 
   if ((await prisma.milestone.count()) === 0) {
