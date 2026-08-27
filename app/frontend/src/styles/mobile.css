@@ -150,6 +150,13 @@
 .m-sec-s{margin:4px 0 0;font-size:11px;color:var(--muted);line-height:1.6;}
 
 /* 工程の縦カード */
+.m-steps-more{
+  display:block; width:100%; margin-top:10px;
+  border:1px dashed var(--line); border-radius:10px;
+  background:var(--bg); color:var(--muted);
+  font:inherit; font-size:12px; font-weight:700;
+  padding:9px 10px; cursor:pointer;
+}
 .m-steps{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;}
 .m-step{
   border:1px solid var(--line); border-radius:12px;

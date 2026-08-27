@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Part } from '../../types';
 import { gaicPhaseLabel, jc } from '../../util';
+import { hiddenLeadingDone } from '../../lib/mobile-steps.logic';
 
 const STATUS_LABEL = { done: '完了', current: '仕掛中', wait: '待ち' } as const;
 
@@ -27,14 +28,18 @@ export function MobilePartDetail({
 }) {
   const [memo, setMemo] = useState(p.memo ?? '');
   const [note, setNote] = useState(p.note ?? '');
+  const [showDone, setShowDone] = useState(false);
   const noteRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setMemo(p.memo ?? '');
     setNote(p.note ?? '');
+    setShowDone(false);
     // 部品を切り替えたときだけ初期化（再取得で入力中のテキストを消さない）
     // eslint-disable-next-line react-hooks/exhaustive-deps -- p.id のみ意図的
   }, [p.id]);
+
+  const hidden = showDone ? 0 : hiddenLeadingDone(p.timeline);
 
   // 所要日数は Shop 別LTの合計なので、算出済みの値から逆算する（PC詳細と同じ根拠）
   const need = p.daysLeft - p.buffer;
@@ -58,11 +63,16 @@ export function MobilePartDetail({
       <section className="m-sec">
         <h2 className="m-sec-t">工程</h2>
         <p className="m-sec-s">上から順に進みます。▼＝これから通る検査、✓＝通過済み。</p>
+        {hidden > 0 && (
+          <button type="button" className="m-steps-more" onClick={() => setShowDone(true)}>
+            完了した{hidden}工程を表示
+          </button>
+        )}
         <ol className="m-steps">
-          {p.timeline.map((t, i) => (
-            <li key={`${t.shop}-${i}`} className={`m-step ${t.status}`}>
+          {p.timeline.slice(hidden).map((t, i) => (
+            <li key={`${t.shop}-${i + hidden}`} className={`m-step ${t.status}`}>
               <div className="m-step-head">
-                <span className="m-step-no">{i + 1}</span>
+                <span className="m-step-no">{i + hidden + 1}</span>
                 <span className="m-step-name">{t.name}</span>
                 <span className={`m-step-badge ${t.status}`}>{STATUS_LABEL[t.status]}</span>
               </div>

@@ -16,8 +16,11 @@ import { MobileInbox } from './MobileInbox';
 import { MobilePartDetail } from './MobilePartDetail';
 import type { Part } from '../../types';
 
-/** 誤操作の取り消し猶予（ms） */
-const UNDO_MS = 6000;
+/**
+ * 誤操作の取り消し猶予（ms）。
+ * 手袋・片手操作で押し直す余裕を見て長めに取る。
+ */
+const UNDO_MS = 12000;
 
 type Undo = { label: string; run: () => void };
 
