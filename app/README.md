@@ -82,7 +82,7 @@ npm run dev                        # Vite HMR (:5173, /api→:8787)
 
 - CSVを差し替えたら `cd backend && npm run etl` を再実行（取込は洗い替え。**担当者・困りごと・メモ（③）は保持**）。
 - マスタ編集は保存時に一覧へ自動反映されます。CLI から手動実行する場合は `cd backend && npm run recompute`（CSVを読まず算出のみ＝高速）。
-- 本番は Windows タスクスケジューラが同じ `npm run etl`（`runEtl`）を定期起動。
+- 本番の定期取込は「データ取込」画面の自動取込（時刻指定・日本時間）。同じ処理は `npm run etl` でも手動実行できる。
 
 ## 主な設定（`.env`）
 
@@ -107,6 +107,7 @@ npm run dev                        # Vite HMR (:5173, /api→:8787)
 | GET | `/api/owners`、POST `/api/owners/:id/kishu` | 担当者×機種 |
 | POST | `/api/assign/auto` | 担当者の自動割り当て（未割当のみ） |
 | GET/POST | `/api/ingest` | 取込状態／取込ジョブ起動 |
+| PUT | `/api/ingest/schedule` | 自動取込の有効／時刻（HH:MM、日本時間） |
 | GET | `/api/audit` | 操作監査ログ |
 
 ## 品質ゲート
@@ -119,7 +120,7 @@ cd frontend && npm run typecheck                       # フロント型チェ�
 ## 本番（Windows Server）との差分
 
 同一スタック（全面TS＋PostgreSQL）のため、差分は薄い接続部のみ：
-1. **バッチ起動**: ローカルは手動 `npm run etl` → 本番は Windows タスクスケジューラが同じ `runEtl` を定期起動。
+1. **バッチ起動**: ローカルは手動 `npm run etl`。本番は「データ取込」の自動取込（指定時刻）が同じ `runEtl` を起動。
 2. **フロント配信**: `frontend/dist` を IIS で静的配信（開発は NestJS/Vite が配信）。
 3. **認証**: メール＋パスワードの JWT ログイン（`/login`）。検証環境は IIS Basic 認証で URL ゲート。操作ユーザー識別は `src/common/app-user.ts`。
 

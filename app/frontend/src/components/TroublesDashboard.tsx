@@ -17,18 +17,30 @@ import { MemoModal } from './shared/MemoModal';
 import { Loading } from './Loading';
 import { TroublesKpi } from './troubles/TroublesKpi';
 import { TroublesToolbar } from './troubles/TroublesToolbar';
+import { PartDetailModal } from './PartDetailModal';
+import { mergePartTimeline, usePartTimelines } from '../hooks/usePartTimelines';
 
 const PAGE_SIZES = [30, 50, 100] as const;
 
 interface Props {
   parts: Part[];
+  stagnantThreshold?: number;
   defaultOwnerFilter?: string;
-  onOpen: (id: string) => void;
   onTrouble: (id: string, flagged: boolean) => void;
   onMemo: (id: string, memo: string) => void;
+  onNote: (id: string, note: string) => void;
+  isLoading?: boolean;
 }
 
-export function TroublesDashboard({ parts, defaultOwnerFilter, onOpen, onTrouble, onMemo }: Props) {
+export function TroublesDashboard({
+  parts,
+  stagnantThreshold = 10,
+  defaultOwnerFilter,
+  onTrouble,
+  onMemo,
+  onNote,
+  isLoading,
+}: Props) {
   const troubles = useMemo(() => parts.filter((p) => p.trouble), [parts]);
   const {
     filter,
@@ -50,9 +62,13 @@ export function TroublesDashboard({ parts, defaultOwnerFilter, onOpen, onTrouble
   const [sorting, setSorting] = useState<SortingState>([{ id: 'troubleDays', desc: true }]);
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 30 });
   const [memoFor, setMemoFor] = useState<Part | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const pageIndex = pagination.pageIndex;
   const pageSize = pagination.pageSize;
   const { busy: pageBusy, runTransition } = usePagedTableTransition();
+  const detailPart = detailId ? parts.find((p) => p.id === detailId) : undefined;
+  const { timelines, loading: tlLoading } = usePartTimelines(detailId ? [detailId] : []);
+  const detailWithTimeline = detailPart ? mergePartTimeline(detailPart, timelines) : undefined;
 
   useEffect(() => {
     setPagination((p) => ({ ...p, pageIndex: 0 }));
@@ -213,7 +229,7 @@ export function TroublesDashboard({ parts, defaultOwnerFilter, onOpen, onTrouble
           <h2 className="trouble-intro-title">
             現在 <b>{troubles.length}</b> 件の困りごと
           </h2>
-          <p className="trouble-intro-sub">経過日数が長いものほど優先的に確認してください。行をクリックすると部品詳細へ移動します。</p>
+          <p className="trouble-intro-sub">経過日数が長いものほど優先的に確認してください。行をクリックすると部品詳細が開きます（一覧の絞り込みは維持されます）。</p>
         </div>
       </div>
 
@@ -257,7 +273,7 @@ export function TroublesDashboard({ parts, defaultOwnerFilter, onOpen, onTrouble
               {table.getRowModel().rows.map((row) => {
                 const u = troubleUrgency(row.original.troubleDays);
                 return (
-                  <tr key={row.id} className={`trouble-row trouble-row-${u}`} onClick={() => onOpen(row.original.id)}>
+                  <tr key={row.id} className={`trouble-row trouble-row-${u}`} onClick={() => setDetailId(row.original.id)}>
                     {row.getVisibleCells().map((cell) => (
                       <td
                         key={cell.id}
@@ -326,6 +342,16 @@ export function TroublesDashboard({ parts, defaultOwnerFilter, onOpen, onTrouble
             onMemo(memoFor.id, text);
             setMemoFor(null);
           }}
+        />
+      )}
+      {detailId && (
+        <PartDetailModal
+          part={detailWithTimeline}
+          stagnantThreshold={stagnantThreshold}
+          loading={Boolean(isLoading && !detailWithTimeline) || (tlLoading && !!detailId && !timelines[detailId])}
+          missingId={detailId}
+          onClose={() => setDetailId(null)}
+          onNote={onNote}
         />
       )}
     </section>

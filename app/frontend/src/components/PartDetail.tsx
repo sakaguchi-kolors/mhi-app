@@ -3,7 +3,19 @@ import type { Part } from '../types';
 import { jc } from '../util';
 import { GaicBadges } from './GaicBadges';
 
-export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: { part: Part; stagnantThreshold?: number; onBack: () => void; onNote: (id: string, note: string) => void }) {
+export function PartDetail({
+  part: p,
+  stagnantThreshold = 10,
+  onBack,
+  onNote,
+  closeLabel = '← 一覧へ戻る',
+}: {
+  part: Part;
+  stagnantThreshold?: number;
+  onBack: () => void;
+  onNote: (id: string, note: string) => void;
+  closeLabel?: string;
+}) {
   const [note, setNote] = useState(p.note ?? '');
   // 部品切替時のみ初期化（p.note を依存に含めると refetch で入力中テキストが消える）
   // eslint-disable-next-line react-hooks/exhaustive-deps -- p.id のみ意図的
@@ -16,13 +28,13 @@ export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: 
     <section>
       <div className="detail-head">
         <div className="detail-title">
-          <h2>{p.name}</h2>
+          <h2 id="part-detail-title">{p.name}</h2>
           <div className="detail-meta">
             <span className="pno">{p.partNo} #{p.inst}</span>　<span className="cat-tag">{p.category}</span>{' '}
             <span className={`state-pill ${p.color}`} style={{ fontSize: 12, padding: '4px 10px' }}>{jc(p.color)} {p.buffer >= 0 ? '+' : ''}{p.buffer}日</span>
           </div>
         </div>
-        <button className="back-btn" onClick={onBack}>← 一覧へ戻る</button>
+        <button className="back-btn" onClick={onBack}>{closeLabel}</button>
       </div>
 
       <div className="detail-grid">

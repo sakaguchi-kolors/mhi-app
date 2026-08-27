@@ -91,6 +91,7 @@ export const MASTERS: MasterDef[] = [
     group: 'import',
     pk: 'order_prefix',
     autoId: false,
+    hidden: true,
     note: '注文番号の前方一致で外注先名を表示。保存後すぐタイムラインに反映されます。',
     columns: [
       { key: 'order_prefix', label: '注文番号プレフィックス', type: 'text', required: true },

@@ -302,15 +302,10 @@ npm run etl
 
 #### 本番（定期実行）
 
-Windows タスクスケジューラで以下を定期実行:
+管理者画面「データ取込」で **自動取込** を有効にし、時刻（例: 08:00・13:00）を指定する。  
+Windows サービス `MhiProgressApi` が動いていれば、日本時間の指定時刻に `CSV_DIR` を取り込む（タスクスケジューラ不要）。
 
-```text
-プログラム: C:\Program Files\nodejs\node.exe
-引数:     dist\scripts\etl.cli.js
-作業Dir:  C:\apps\mhi-app\app\backend
-```
-
-または PowerShell ラッパー:
+緊急・手動は従来どおり:
 
 ```powershell
 cd C:\apps\mhi-app\app\backend
@@ -409,7 +404,7 @@ Get-Website
 | Basic 認証 | 付与（URL ゲート） | 任意（VPN 内なら省略可） |
 | CSV | `C:\apps\mhi-app\data\csv` | 共有フォルダ |
 | HTTPS | 後から設定 | 先方証明書を使用 |
-| ETL | 手動 | タスクスケジューラ |
+| ETL | 手動または自動取込 | 画面の自動取込（時刻指定） |
 | ソース更新 | 納品 ZIP（または社内 Git + `-GitPull`） | **納品 ZIP のみ** |
 
 **デプロイコマンド（`setup-server.ps1` / `deploy.ps1`）は同一** です。
