@@ -1,0 +1,250 @@
+/* ===== スマホ専用画面（/m） =====
+   PC 画面の縮小ではなく、片手・親指操作を前提にした別レイアウト。 */
+
+.m-app{
+  --m-pad:12px;
+  --m-bar-h:60px;
+  min-height:100dvh;
+  background:var(--bg);
+  color:var(--text);
+  display:flex;
+  flex-direction:column;
+}
+
+/* --- 上部バー --- */
+.m-topbar{
+  background:var(--nav); color:#fff;
+  padding:10px var(--m-pad) 8px;
+}
+.m-topbar-main{display:flex;align-items:baseline;gap:10px;}
+.m-brand{font-size:17px;font-weight:800;}
+.m-asof{font-size:11px;opacity:.75;}
+.m-topbar-sub{display:flex;align-items:center;gap:10px;margin-top:4px;font-size:11px;opacity:.85;}
+.m-me{font-weight:700;}
+.m-link{background:none;border:none;color:#fff;font:inherit;text-decoration:underline;padding:4px 0;cursor:pointer;}
+
+.m-main{flex:1;position:relative;}
+.m-error{margin:var(--m-pad);padding:10px 12px;border-radius:10px;background:var(--red-bg);border:1px solid var(--red-soft);color:var(--red);font-size:13px;}
+
+/* --- 絞り込み ---
+   スクロール中もタブと検索を触れるよう、上部バーではなくここを固定する。 */
+.m-filters{
+  position:sticky; top:0; z-index:15;
+  background:var(--bg);
+  box-shadow:0 2px 8px rgba(31,42,68,.06);
+  padding:10px var(--m-pad) 8px;
+  border-bottom:1px solid var(--line);
+  display:flex; flex-direction:column; gap:8px;
+}
+.m-search{
+  width:100%; box-sizing:border-box;
+  border:1px solid var(--line); border-radius:12px;
+  padding:11px 12px; font-size:16px; /* iOS の自動ズーム回避 */
+  font-family:inherit; color:var(--text); background:var(--panel);
+}
+.m-search:focus{outline:none;border-color:var(--info);box-shadow:0 0 0 3px var(--info-bg);}
+
+.m-tabs{display:flex;gap:6px;}
+.m-tab{
+  flex:1; display:flex; align-items:center; justify-content:center; gap:6px;
+  min-height:40px; padding:8px 4px;
+  border:1px solid var(--line); border-radius:12px;
+  background:var(--panel); color:var(--muted);
+  font:inherit; font-size:13px; font-weight:700; cursor:pointer;
+}
+.m-tab.on{background:var(--nav);border-color:var(--nav);color:#fff;}
+.m-tab-n{font-size:11px;font-weight:700;background:var(--bg);color:var(--text);border-radius:9px;padding:1px 6px;}
+.m-tab.on .m-tab-n{background:rgba(255,255,255,.22);color:#fff;}
+
+.m-selects{display:flex;gap:6px;}
+.m-selects select{
+  flex:1; min-width:0; min-height:38px;
+  border:1px solid var(--line); border-radius:10px;
+  background:var(--panel); color:var(--text);
+  font-family:inherit; font-size:13px; padding:6px 8px;
+}
+.m-checked-toggle{
+  align-self:flex-start;
+  background:none;border:none;padding:2px 0;
+  color:var(--info);font:inherit;font-size:12px;text-decoration:underline;cursor:pointer;
+}
+
+/* --- カード一覧 --- */
+/* 下端は「元に戻す」バーが被らない分だけ空ける */
+.m-list{display:flex;flex-direction:column;gap:10px;padding:12px var(--m-pad) 84px;}
+.m-empty{color:var(--muted);font-size:13px;line-height:1.8;text-align:center;padding:32px 0;}
+
+.m-card{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-left:5px solid var(--line);
+  border-radius:14px;
+  box-shadow:0 2px 6px rgba(31,42,68,.06);
+  overflow:hidden;
+}
+.m-card.red{border-left-color:var(--red);}
+.m-card.yellow{border-left-color:var(--yellow);}
+.m-card.green{border-left-color:var(--green);}
+.m-card.checked{opacity:.6;}
+
+.m-card-main{
+  display:block; width:100%; box-sizing:border-box;
+  background:none; border:none; text-align:left;
+  padding:12px 12px 10px; font:inherit; color:inherit; cursor:pointer;
+}
+.m-card-row1{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
+.m-sev{font-size:12px;font-weight:800;border-radius:999px;padding:3px 10px;}
+.m-sev.red{background:var(--red-bg);color:var(--red);}
+.m-sev.yellow{background:var(--yellow-bg);color:var(--yellow);}
+.m-sev.green{background:var(--green-bg);color:var(--green);}
+.m-days{font-size:12px;font-weight:700;color:var(--muted);}
+.m-mark{font-size:11px;font-weight:700;border-radius:8px;padding:2px 8px;}
+.m-mark.trouble{background:#fff1e2;color:#c26a11;}
+.m-mark.done{background:var(--green-bg);color:var(--green);}
+
+.m-kishu{font-size:11px;color:var(--muted);}
+.m-name{font-size:16px;font-weight:800;line-height:1.35;margin:1px 0 2px;}
+.m-no{font-size:12px;color:var(--muted);}
+.m-no span{opacity:.7;}
+.m-card-row2{display:flex;justify-content:space-between;gap:8px;margin-top:8px;font-size:12px;color:var(--muted);}
+.m-shop{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.m-stag{white-space:nowrap;}
+.m-stag.flag{color:var(--red);font-weight:700;}
+
+.m-card-act{display:flex;border-top:1px solid var(--line);}
+.m-act{
+  flex:1; min-height:44px;
+  background:var(--panel); border:none; border-right:1px solid var(--line);
+  font:inherit; font-size:13px; font-weight:700; color:var(--muted); cursor:pointer;
+}
+.m-act:last-child{border-right:none;}
+.m-act.ok{color:var(--green);}
+.m-act.ok.on{background:var(--green-bg);}
+.m-act.tr{color:#c26a11;}
+.m-act.tr.on{background:#fff1e2;}
+
+/* --- 詳細 --- */
+.m-detail{padding-bottom:8px;}
+.m-detail-head{
+  background:var(--panel);
+  border-bottom:1px solid var(--line);
+  border-left:5px solid var(--line);
+  padding:10px var(--m-pad) 12px;
+}
+.m-detail-head.red{border-left-color:var(--red);}
+.m-detail-head.yellow{border-left-color:var(--yellow);}
+.m-detail-head.green{border-left-color:var(--green);}
+.m-back{background:none;border:none;padding:4px 0;color:var(--info);font:inherit;font-size:13px;cursor:pointer;}
+.m-detail-title{font-size:18px;font-weight:800;line-height:1.35;margin-top:4px;}
+.m-detail-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+.m-detail-pills{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;}
+
+.m-sec{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:14px;
+  margin:10px var(--m-pad);
+  padding:12px;
+}
+.m-sec-t{margin:0;font-size:14px;font-weight:800;}
+.m-sec-s{margin:4px 0 0;font-size:11px;color:var(--muted);line-height:1.6;}
+
+/* 工程の縦カード */
+.m-steps{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;}
+.m-step{
+  border:1px solid var(--line); border-radius:12px;
+  border-left:4px solid var(--wait);
+  padding:9px 10px; background:var(--panel);
+}
+.m-step.done{border-left-color:var(--done);opacity:.72;}
+.m-step.current{border-left-color:var(--info);background:var(--info-bg);}
+.m-step-head{display:flex;align-items:center;gap:8px;}
+.m-step-no{
+  flex:none; width:22px; height:22px; border-radius:50%;
+  background:var(--bg); color:var(--muted);
+  font-size:11px; font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+}
+.m-step.current .m-step-no{background:var(--info);color:#fff;}
+.m-step-name{flex:1;font-size:14px;font-weight:700;line-height:1.3;}
+.m-step-badge{flex:none;font-size:11px;font-weight:700;border-radius:8px;padding:2px 8px;background:var(--wait);color:var(--muted);}
+.m-step-badge.done{background:#e7ecf5;color:var(--done);}
+.m-step-badge.current{background:var(--info);color:#fff;}
+.m-step-meta{display:flex;justify-content:space-between;gap:8px;margin-top:5px;padding-left:30px;font-size:11px;color:var(--muted);}
+.m-step-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;padding-left:30px;}
+
+.m-tag{font-size:11px;font-weight:700;border-radius:8px;padding:2px 8px;background:var(--bg);color:var(--muted);}
+.m-tag.ms{background:var(--info-bg);color:var(--info);}
+.m-tag.ms.passed{background:var(--green-bg);color:var(--green);}
+.m-tag.ms.red{background:var(--red-bg);color:var(--red);}
+.m-tag.ms.yellow{background:var(--yellow-bg);color:var(--yellow);}
+.m-tag.gaic{background:#f2ecff;color:#6b4bd6;}
+.m-tag.urg{background:var(--red-bg);color:var(--red);}
+.m-tag.sho{background:var(--yellow-bg);color:var(--yellow);}
+.m-flags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+
+/* 判定根拠 */
+.m-calc{margin:10px 0 0;display:flex;flex-direction:column;}
+.m-calc > div{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13px;}
+.m-calc > div.sum{border-bottom:none;font-weight:800;}
+.m-calc dt{margin:0;color:var(--muted);font-size:12px;}
+.m-calc dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;}
+.m-calc dd.red{color:var(--red);}
+.m-calc dd.green{color:var(--green);}
+.m-stag-note{margin:8px 0 0;font-size:12px;color:var(--muted);line-height:1.7;}
+.m-stag-note.flag{color:var(--red);font-weight:700;}
+
+.m-switch{display:flex;align-items:center;gap:8px;margin:10px 0 8px;font-size:14px;font-weight:700;}
+.m-switch input{width:22px;height:22px;}
+.m-area{
+  width:100%; box-sizing:border-box;
+  border:1px solid var(--line); border-radius:10px;
+  padding:10px; font-family:inherit; font-size:16px; color:var(--text);
+  resize:vertical;
+}
+.m-area:focus{outline:none;border-color:var(--info);box-shadow:0 0 0 3px var(--info-bg);}
+
+/* --- 下部の操作バー --- */
+.m-actionbar{
+  position:sticky; bottom:0; z-index:18;
+  display:flex; gap:8px;
+  padding:8px var(--m-pad) calc(8px + env(safe-area-inset-bottom));
+  background:var(--panel); border-top:1px solid var(--line);
+  box-shadow:0 -2px 10px rgba(31,42,68,.08);
+}
+.m-abtn{
+  flex:1; min-height:44px; border-radius:12px;
+  border:1px solid var(--line); background:var(--panel);
+  font:inherit; font-size:13px; font-weight:800; color:var(--text); cursor:pointer;
+}
+.m-abtn.ok{border-color:var(--green-soft);color:var(--green);}
+.m-abtn.ok.on{background:var(--green-bg);}
+.m-abtn.tr{border-color:#f2c894;color:#c26a11;}
+.m-abtn.tr.on{background:#fff1e2;}
+
+/* --- 元に戻す --- */
+.m-undo{
+  position:fixed; left:12px; right:12px; z-index:40;
+  bottom:calc(16px + env(safe-area-inset-bottom));
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  background:var(--nav); color:#fff;
+  border-radius:12px; padding:12px 14px;
+  font-size:13px; box-shadow:var(--shadow);
+}
+.m-undo button{
+  flex:none; background:rgba(255,255,255,.16); color:#fff;
+  border:1px solid rgba(255,255,255,.35); border-radius:9px;
+  padding:8px 14px; font:inherit; font-size:13px; font-weight:800; cursor:pointer;
+}
+/* 詳細画面では下部の操作バーの上に出す */
+.m-app.with-actionbar .m-undo{bottom:calc(var(--m-bar-h) + 12px + env(safe-area-inset-bottom));}
+
+/* --- PC画面からスマホ画面へ渡すリンク（狭い幅でだけ出す） --- */
+.to-mobile{display:none;}
+@media (max-width:900px){
+  .to-mobile{
+    display:inline-block;
+    background:var(--nav); color:#fff; border:none; border-radius:9px;
+    padding:7px 12px; font:inherit; font-size:12px; font-weight:700; cursor:pointer;
+  }
+}

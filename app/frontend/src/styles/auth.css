@@ -15,3 +15,14 @@
   .user-chip em{font-style:normal;font-size:10px;color:var(--muted);background:var(--bg);border-radius:8px;padding:2px 6px;}
 
   .row-inactive{opacity:.55;}
+
+  /* ===== 狭い幅（スマホ）のログイン ===== */
+  @media (max-width:640px){
+    /* アドレスバーの伸縮で下端が切れないよう dvh を使う */
+    .auth-wrap{min-height:100dvh;padding:16px;align-items:flex-start;padding-top:12vh;}
+    .auth-card{max-width:none;padding:22px 18px;border-radius:14px;gap:16px;}
+    .auth-title{font-size:22px;}
+    /* iOS で入力時に自動ズームしない最小サイズ */
+    .auth-field input{font-size:16px;padding:12px;min-height:44px;}
+    .auth-btn{min-height:48px;font-size:16px;}
+  }

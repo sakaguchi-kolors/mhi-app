@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { Part, Meta } from './types';
 import type { Me, RecomputeResult } from './api';
 import { PartsList } from './components/PartsList';
@@ -10,10 +10,12 @@ import { Masters } from './components/Masters';
 import { Ingest } from './components/Ingest';
 import { OwnerKishu } from './components/OwnerKishu';
 import { Login, Setup } from './Auth';
+import { MobileApp } from './components/mobile/MobileApp';
+import { isNarrowViewport, readViewPref, shouldAutoRedirectToMobile, writeViewPref } from './lib/mobile-view';
 import { Sidebar } from './components/Sidebar';
 import { Toast, useToast } from './components/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { PAGE_TITLES, routes, screenFromPath } from './routes';
+import { isMobilePath, PAGE_TITLES, routes, screenFromPath } from './routes';
 import { Loading } from './components/Loading';
 import { useAuth } from './context/AuthContext';
 import { useAppData, usePartMutations } from './hooks/useAppData';
@@ -150,6 +152,16 @@ function AppLayout({
               {screen === 'detail' && detailPart && <span>{detailPart.partNo}</span>}
             </h1>
             {asof && <div className="asof">データ基準日 <b>{asof}</b></div>}
+            <button
+              type="button"
+              className="to-mobile"
+              onClick={() => {
+                writeViewPref('mobile');
+                navigate(routes.mobile);
+              }}
+            >
+              スマホ版
+            </button>
           </header>
           <main className="main">
             {loadError && (
@@ -298,8 +310,23 @@ export function App() {
   const handleAuthed = (u: Me) => {
     setMe(u);
     setNeedsSetup(false);
-    navigate(routes.parts, { replace: true });
+    const from = (location.state as { from?: string } | null)?.from;
+    if (from && isMobilePath(from)) {
+      navigate(from, { replace: true });
+      return;
+    }
+    const toMobile = shouldAutoRedirectToMobile(routes.parts, readViewPref(), isNarrowViewport());
+    navigate(toMobile ? routes.mobile : routes.parts, { replace: true });
   };
+
+  // 狭い端末で入口（/ か /parts）を開いたときだけスマホ画面へ送る。
+  // PC の他画面を開いている最中は横取りしない。
+  useEffect(() => {
+    if (booting || !me) return;
+    if (shouldAutoRedirectToMobile(location.pathname, readViewPref(), isNarrowViewport())) {
+      navigate(routes.mobile, { replace: true });
+    }
+  }, [booting, me, location.pathname, navigate]);
 
   if (booting) {
     return (
@@ -329,6 +356,16 @@ export function App() {
       <Route
         path={routes.setup}
         element={me ? <Navigate to={routes.parts} replace /> : needsSetup ? <Setup onDone={handleAuthed} /> : <Navigate to={routes.login} replace />}
+      />
+      <Route
+        path={`${routes.mobile}/*`}
+        element={
+          me ? (
+            <MobileApp />
+          ) : (
+            <Navigate to={needsSetup ? routes.setup : routes.login} replace state={{ from: location.pathname }} />
+          )
+        }
       />
       <Route
         path="/*"

@@ -11,7 +11,15 @@ export const routes = {
   masters: '/masters',
   master: (name: string) => `/masters/${encodeURIComponent(name)}`,
   masterHistory: '/masters/history',
+  // スマホ専用画面（PC画面の縮小ではなく別ルート）
+  mobile: '/m',
+  mobilePart: (id: string) => `/m/parts/${encodeURIComponent(id)}`,
 } as const;
+
+/** スマホ専用画面のパスか */
+export function isMobilePath(pathname: string): boolean {
+  return pathname === routes.mobile || pathname.startsWith(`${routes.mobile}/`);
+}
 
 export type ScreenKey = 'parts' | 'detail' | 'heatmap' | 'troubles' | 'ingest' | 'owners' | 'masters';
 
