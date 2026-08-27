@@ -50,6 +50,15 @@ export class PartsService {
     this.partsCache = null;
   }
 
+  /**
+   * ③アプリ固有データ（担当者・困りごと・保留・メモ）の更新後に一覧キャッシュを捨てる。
+   * キャッシュのキーは再計算日時なので、画面からの書込みでは自動で外れない。
+   * タイムラインはこれらの操作で変わらないため残す。
+   */
+  private invalidateSummaries(): void {
+    if (this.partsCache) this.partsCache = { ...this.partsCache, summaries: [] };
+  }
+
   /** 一覧向け（タイムラインなし・軽量） */
   async buildPartsSummary(): Promise<Part[]> {
     const computedAt = await this.loadComputedAt();
@@ -246,6 +255,7 @@ export class PartsService {
       update: { userId, assignedAt },
       create: { osId, userId, assignedAt },
     });
+    this.invalidateSummaries();
     const after = await this.snapshotPartApp(osId);
     await this.audit.record(user, 'part.owner', 't_assignment', osId, before, after);
   }
@@ -259,6 +269,7 @@ export class PartsService {
       update: { flagged, flaggedAt },
       create: { osId, flagged, flaggedAt },
     });
+    this.invalidateSummaries();
     const after = await this.snapshotPartApp(osId);
     await this.audit.record(user, 'part.trouble', 't_trouble', osId, before, after);
   }
@@ -272,6 +283,7 @@ export class PartsService {
       update: { flagged, flaggedAt },
       create: { osId, flagged, flaggedAt },
     });
+    this.invalidateSummaries();
     const after = await this.snapshotPartApp(osId);
     await this.audit.record(user, 'part.shelved', 't_shelved', osId, before, after);
   }
@@ -285,6 +297,7 @@ export class PartsService {
       update: { memo },
       create: { osId, memo },
     });
+    this.invalidateSummaries();
     const after = await this.snapshotPartApp(osId);
     await this.audit.record(user, 'part.memo', 't_trouble', osId, before, after);
   }
@@ -298,6 +311,7 @@ export class PartsService {
       update: { body, updatedAt: new Date() },
       create: { osId, body, updatedAt: new Date() },
     });
+    this.invalidateSummaries();
     const after = await this.snapshotPartApp(osId);
     await this.audit.record(user, 'part.note', 't_note', osId, before, after);
   }
