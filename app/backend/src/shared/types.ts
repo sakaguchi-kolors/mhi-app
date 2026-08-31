@@ -85,6 +85,8 @@ export interface MasterDef {
   autoId: boolean;
   columns: ColDef[];
   note?: string;
+  /** true のときマスタ管理のタブから外す（API・直接URL・算出は残す） */
+  hidden?: boolean;
 }
 
 export interface Meta {
@@ -141,6 +143,15 @@ export interface IngestJob {
   error: string | null;
 }
 
+export interface IngestSchedule {
+  enabled: boolean;
+  times: string[];
+  lastTriggeredAt: string | null;
+  lastSlot: string | null;
+  nextRunAt: string | null;
+  timezone: 'Asia/Tokyo';
+}
+
 export interface IngestInfo {
   dir: string;
   files: IngestFile[];
@@ -148,6 +159,7 @@ export interface IngestInfo {
   job: IngestJob | null;
   /** CSVアップロード1ファイルあたりの上限（MB） */
   uploadMaxMb: number;
+  schedule?: IngestSchedule;
 }
 
 export interface IngestUploadResult {

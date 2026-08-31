@@ -1,22 +1,54 @@
-import { Controller, Get, Post, Req, Res, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Req, Res, UseInterceptors } from '@nestjs/common';
 import { ApiBody, ApiConsumes, ApiCookieAuth, ApiParam, ApiTags } from '@nestjs/swagger';
+import { IsArray, IsBoolean, IsString } from 'class-validator';
 import type { Request, Response } from 'express';
 import { IngestService, type IngestInfo, type StartResult, type UploadResult } from './ingest.service';
+import { IngestScheduleService } from './ingest-schedule.service';
+import { AuditService } from '../audit/audit.service';
 import { appUser } from '../common/app-user';
 import { Roles } from '../auth/auth.decorators';
 import { IngestUploadInterceptor, ingestUploadKeyFromRequest } from './ingest-upload.interceptor';
+import type { IngestSchedule } from '../shared/types';
+
+class IngestScheduleBodyDto {
+  @IsBoolean()
+  enabled!: boolean;
+
+  @IsArray()
+  @IsString({ each: true })
+  times!: string[];
+}
 
 @Roles('管理者')
 @Controller('ingest')
 @ApiTags('ingest')
 @ApiCookieAuth('mhi_token')
 export class IngestController {
-  constructor(private readonly ingest: IngestService) {}
+  constructor(
+    private readonly ingest: IngestService,
+    private readonly schedule: IngestScheduleService,
+    private readonly audit: AuditService,
+  ) {}
 
-  // フォルダ内ファイル一覧＋プリフライト＋ジョブ状態（フロントはこれをポーリング）
+  // フォルダ内ファイル一覧＋プリフライト＋ジョブ状態＋自動取込スケジュール（フロントはこれをポーリング）
   @Get()
-  info(): Promise<IngestInfo> {
-    return this.ingest.ingestInfo();
+  async info(): Promise<IngestInfo> {
+    const info = await this.ingest.ingestInfo();
+    return { ...info, schedule: this.schedule.getPublic() };
+  }
+
+  @Put('schedule')
+  async saveSchedule(
+    @Req() req: Request,
+    @Body() body: IngestScheduleBodyDto,
+  ): Promise<IngestSchedule> {
+    const user = appUser(req);
+    const saved = this.schedule.save(body, user);
+    await this.audit.record(user, 'ingest.schedule', 'batch', '-', null, {
+      enabled: saved.enabled,
+      times: saved.times,
+    });
+    return saved;
   }
 
   // 取込開始（プリフライトNGは422、実行中は409）。runEtlは非同期実行し状態はGETで見せる

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   useReactTable, getCoreRowModel, getSortedRowModel, getPaginationRowModel, flexRender,
   type ColumnDef, type SortingState, type PaginationState,
@@ -13,6 +13,7 @@ import { PartsListKpi } from './parts/PartsListKpi';
 import { PartsListToolbar } from './parts/PartsListToolbar';
 import { MemoModal } from './shared/MemoModal';
 import { Loading } from './Loading';
+import { loadPartsListView, savePartsListView } from '../lib/parts-list-view';
 
 const PAGE_SIZES = [30, 50, 100, 500] as const;
 
@@ -52,8 +53,11 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
     ownerOpts,
     kpi,
   } = usePartsFilter(parts, stagnantThreshold, defaultOwnerFilter);
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'sev', desc: false }]);
-  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 30 });
+  const [sorting, setSorting] = useState<SortingState>(() => loadPartsListView().sorting);
+  const [pagination, setPagination] = useState<PaginationState>(() => {
+    const v = loadPartsListView();
+    return { pageIndex: v.pageIndex, pageSize: v.pageSize };
+  });
   const [memoFor, setMemoFor] = useState<Part | null>(null);
   const { busy: pageBusy, runTransition } = usePagedTableTransition();
 
@@ -61,7 +65,27 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
   const pageIndex = pagination.pageIndex;
   const pageSize = pagination.pageSize;
 
-  useEffect(() => { setPagination((p) => ({ ...p, pageIndex: 0 })); }, [filter, query, cat, owner, kishu, showShelved]);
+  const skipPageReset = useRef(true);
+  useEffect(() => {
+    if (skipPageReset.current) {
+      skipPageReset.current = false;
+      return;
+    }
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  }, [filter, query, cat, owner, kishu, showShelved]);
+
+  useEffect(() => {
+    savePartsListView({
+      filter,
+      query,
+      cat,
+      owner: defaultOwnerFilter ?? owner,
+      showShelved,
+      pageIndex: pagination.pageIndex,
+      pageSize: pagination.pageSize,
+      sorting,
+    });
+  }, [filter, query, cat, owner, defaultOwnerFilter, showShelved, pagination, sorting]);
 
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const { timelines } = usePartTimelines(visibleIds);

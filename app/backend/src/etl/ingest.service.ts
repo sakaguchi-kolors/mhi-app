@@ -42,6 +42,7 @@ export interface IngestInfo {
   preflightOk: boolean;
   job: IngestJob | null;
   uploadMaxMb: number;
+  schedule?: import('../shared/types').IngestSchedule;
 }
 export interface StartResult {
   started: boolean;

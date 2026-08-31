@@ -1,5 +1,6 @@
 // ETL/再計算のCLIエントリ。プロトタイプ etl.ts 末尾の直接実行部を移植。
-// 本番は Windows タスクスケジューラが `npm run etl`（= このスクリプト）を定期起動する。
+// 本番の定期取込はアプリ常駐プロセスの自動取込（データ取込画面で時刻指定）が主。
+// 手動・緊急時は `npm run etl` でも同じ runEtl を実行できる。
 //   npm run etl            … CSV取込＋算出＋DB洗い替え（runEtl）
 //   npm run etl -- --dry   … DBに触れず集計サマリのみ
 //   npm run recompute      … CSVを読まず算出のみ（recompute）

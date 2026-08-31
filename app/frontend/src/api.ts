@@ -151,6 +151,8 @@ export const runIngest = async (): Promise<{ status: number; started: boolean; r
   const data = await r.json().catch(() => ({}));
   return { status: r.status, ...data };
 };
+export const saveIngestSchedule = (body: { enabled: boolean; times: string[] }) =>
+  fetch('/api/ingest/schedule', withCreds({ method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).then(j<import('./types').IngestSchedule>);
 
 export type IngestUploadKey = 'flexsche' | 'pbs' | 'octopus' | 'shopMaster';
 

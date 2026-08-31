@@ -296,7 +296,7 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
       </div>
 
       <div className="toolbar master-tabs">
-        {defs.map((d) => (
+        {defs.filter((d) => !d.hidden).map((d) => (
           <button
             key={d.name}
             type="button"
@@ -319,6 +319,9 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
 
       <div className="panel panel-loading-wrap">
         <p className="mnote">{TAB_BLURB[cur] ?? def?.note}</p>
+        {def?.hidden && (
+          <p className="mnote">このマスタは通常のタブから非表示です。API・算出（外注先名の表示）は有効なままです。</p>
+        )}
         {rowsLoading && (
           <Loading variant="veil" label="マスタデータを読み込み中…" />
         )}

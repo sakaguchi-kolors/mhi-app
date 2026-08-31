@@ -2,17 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Part } from '../types';
 import { facetOptions } from '../lib/facet';
 import { computePartsKpi, matchPartsFilter, type ChipFilter } from '../lib/parts-filter.logic';
+import { loadPartsListView } from '../lib/parts-list-view';
 
 export type { ChipFilter };
 
 export function usePartsFilter(parts: Part[], stagnantThreshold: number, defaultOwnerFilter?: string) {
-  const [filter, setFilter] = useState<ChipFilter>('all');
-  const [cat, setCat] = useState('all');
-  const [owner, setOwner] = useState(defaultOwnerFilter ?? 'all');
+  const stored = useMemo(() => loadPartsListView(), []);
+  const [filter, setFilter] = useState<ChipFilter>(stored.filter);
+  const [cat, setCat] = useState(stored.cat);
+  const [owner, setOwner] = useState(defaultOwnerFilter ?? stored.owner);
   // 機種フィルタのみ localStorage に永続化（よく使う絞り込みを再訪問時も維持するため）
   const [kishu, setKishu] = useState(() => localStorage.getItem('mop_kishu') ?? 'all');
-  const [showShelved, setShowShelved] = useState(false);
-  const [query, setQuery] = useState('');
+  const [showShelved, setShowShelved] = useState(stored.showShelved);
+  const [query, setQuery] = useState(stored.query);
 
   useEffect(() => {
     localStorage.setItem('mop_kishu', kishu);

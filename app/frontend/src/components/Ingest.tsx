@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { IngestInfo } from '../types';
+import type { IngestInfo, IngestSchedule } from '../types';
 import * as api from '../api';
 import type { ToastState } from './Toast';
 import { Loading } from './Loading';
+import { IngestSchedulePanel } from './ingest/IngestSchedulePanel';
 
 const MB = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
 const fmtTime = (s: string | null) => (s ? s.replace('T', ' ').slice(0, 19) : '—');
@@ -132,12 +133,20 @@ export function Ingest({ toast, onIngested }: { toast: ToastState; onIngested: (
       <div className="page-head">
         <div>
           <h2>データ取込</h2>
-          <p>CSVをアップロードするか、指定フォルダに配置したファイルを取り込みます（本番は同じ処理をタスクスケジューラで定期実行）。取込は洗い替えで、担当者・困りごと・メモは温存されます。</p>
+          <p>CSVをアップロードするか、指定フォルダに配置したファイルを取り込みます。自動取込の時刻もここで指定できます。取込は洗い替えで、担当者・困りごと・メモは温存されます。</p>
         </div>
         <button className="back-btn" onClick={start} disabled={starting || running || uploading || !info?.preflightOk}>
           {running ? '取込中…' : starting ? '開始中…' : '⬇ 取込実行'}
         </button>
       </div>
+
+      <IngestSchedulePanel
+        info={info}
+        toast={toast}
+        onSaved={(schedule: IngestSchedule) => {
+          setInfo((prev) => (prev ? { ...prev, schedule } : prev));
+        }}
+      />
 
       <div className="panel" style={{ marginBottom: 16 }}>
         <h3 className="pt">CSVアップロード</h3>

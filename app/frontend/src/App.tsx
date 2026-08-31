@@ -1,10 +1,10 @@
-import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useMemo } from 'react';
 import type { Part, Meta } from './types';
 import type { Me, RecomputeResult } from './api';
 import { PartsList } from './components/PartsList';
 import { TroublesDashboard } from './components/TroublesDashboard';
-import { PartDetail } from './components/PartDetail';
+import { PartDetailRouteModal } from './components/PartDetailModal';
 import { Masters } from './components/Masters';
 import { Ingest } from './components/Ingest';
 import { OwnerKishu } from './components/OwnerKishu';
@@ -16,64 +16,53 @@ import { PAGE_TITLES, routes, screenFromPath } from './routes';
 import { Loading } from './components/Loading';
 import { useAuth } from './context/AuthContext';
 import { useAppData, usePartMutations } from './hooks/useAppData';
-import { mergePartTimeline, usePartTimelines } from './hooks/usePartTimelines';
 
 function AdminRoute({ admin, children }: { admin: boolean; children: React.ReactNode }) {
   if (!admin) return <Navigate to={routes.parts} replace />;
   return <>{children}</>;
 }
 
-function PartDetailRoute({
+function PartsSection({
   parts,
-  stagnantThreshold,
-  onNote,
-  isLoading,
+  meta,
+  admin,
+  me,
+  onAutoAssign,
+  onOpen,
+  onOwner,
+  onTrouble,
+  onShelved,
+  onMemo,
 }: {
   parts: Part[];
-  stagnantThreshold: number;
-  onNote: (id: string, note: string) => void;
-  isLoading: boolean;
+  meta: Meta | null;
+  admin: boolean;
+  me: Me;
+  onAutoAssign?: () => void;
+  onOpen: (id: string) => void;
+  onOwner: (id: string, owner: string) => void;
+  onTrouble: (id: string, flagged: boolean) => void;
+  onShelved: (id: string, flagged: boolean) => void;
+  onMemo: (id: string, memo: string) => void;
 }) {
-  const { id: rawId } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  let id: string | undefined;
-  try {
-    id = rawId ? decodeURIComponent(rawId) : undefined;
-  } catch {
-    return <Navigate to={routes.parts} replace />;
-  }
-  const part = id ? parts.find((p) => p.id === id) : undefined;
-  const { timelines, loading: tlLoading } = usePartTimelines(id ? [id] : []);
-  const partWithTimeline = part ? mergePartTimeline(part, timelines) : undefined;
-  if (!id) return <Navigate to={routes.parts} replace />;
-  if (!partWithTimeline) {
-    if (isLoading) return null;
-    return (
-      <div className="panel">
-        部品が見つかりません（ID: {id}）
-        <div style={{ marginTop: 12 }}>
-          <button className="back-btn" onClick={() => navigate(routes.parts)}>← 一覧へ戻る</button>
-        </div>
-      </div>
-    );
-  }
-  if (tlLoading && !timelines[id]) {
-    return (
-      <section>
-        <div className="detail-head">
-          <div className="detail-title">
-            <h2>{partWithTimeline.name}</h2>
-            <div className="detail-meta">
-              <span className="pno">{partWithTimeline.partNo} #{partWithTimeline.inst}</span>
-            </div>
-          </div>
-          <button className="back-btn" onClick={() => navigate(routes.parts)}>← 一覧へ戻る</button>
-        </div>
-        <Loading variant="veil" label="工程タイムラインを読み込み中…" />
-      </section>
-    );
-  }
-  return <PartDetail part={partWithTimeline} stagnantThreshold={stagnantThreshold} onBack={() => navigate(routes.parts)} onNote={onNote} />;
+  return (
+    <>
+      <PartsList
+        parts={parts}
+        owners={meta?.owners ?? []}
+        stagnantThreshold={meta?.stagnantThreshold ?? 10}
+        admin={admin}
+        defaultOwnerFilter={admin ? undefined : me.displayName}
+        onAutoAssign={onAutoAssign}
+        onOpen={onOpen}
+        onOwner={onOwner}
+        onTrouble={onTrouble}
+        onShelved={onShelved}
+        onMemo={onMemo}
+      />
+      <Outlet />
+    </>
+  );
 }
 
 function AppLayout({
@@ -132,7 +121,6 @@ function AppLayout({
 
   const openDetail = (id: string) => {
     navigate(routes.part(id));
-    window.scrollTo(0, 0);
   };
 
   return (
@@ -163,12 +151,11 @@ function AppLayout({
                   <Route
                     path={routes.parts}
                     element={
-                      <PartsList
+                      <PartsSection
                         parts={parts}
-                        owners={meta?.owners ?? []}
-                        stagnantThreshold={meta?.stagnantThreshold ?? 10}
+                        meta={meta}
                         admin={admin}
-                        defaultOwnerFilter={admin ? undefined : me.displayName}
+                        me={me}
                         onAutoAssign={onAutoAssign}
                         onOpen={openDetail}
                         onOwner={onOwner}
@@ -177,25 +164,28 @@ function AppLayout({
                         onMemo={onMemo}
                       />
                     }
-                  />
+                  >
+                    <Route
+                      path=":id"
+                      element={
+                        <PartDetailRouteModal
+                          parts={parts}
+                          stagnantThreshold={meta?.stagnantThreshold ?? 10}
+                          onNote={onNote}
+                          isLoading={isLoading}
+                        />
+                      }
+                    />
+                  </Route>
                   <Route
                     path={routes.troubles}
                     element={
                       <TroublesDashboard
                         parts={parts}
+                        stagnantThreshold={meta?.stagnantThreshold ?? 10}
                         defaultOwnerFilter={admin ? undefined : me.displayName}
-                        onOpen={openDetail}
                         onTrouble={onTrouble}
                         onMemo={onMemo}
-                      />
-                    }
-                  />
-                  <Route
-                    path={`${routes.parts}/:id`}
-                    element={
-                      <PartDetailRoute
-                        parts={parts}
-                        stagnantThreshold={meta?.stagnantThreshold ?? 10}
                         onNote={onNote}
                         isLoading={isLoading}
                       />
