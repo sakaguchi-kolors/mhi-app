@@ -30,8 +30,11 @@ export class AuthService {
   }
 
   async getUserById(userId: number): Promise<PublicUser | null> {
-    const u = await this.prisma.user.findUnique({ where: { userId } });
-    return u ? this.toPublic(u) : null;
+    const u = await this.prisma.user.findUnique({
+      where: { userId },
+      include: { kishus: { select: { kishu: true }, orderBy: { kishu: 'asc' } } },
+    });
+    return u ? this.toPublic(u, u.kishus.map((k) => k.kishu)) : null;
   }
 
   private normalizeEmail(raw: unknown): string {
@@ -42,14 +45,24 @@ export class AuthService {
     if (!email || !EMAIL_RE.test(email)) throw new BadRequestException('有効なメールアドレスを入力してください');
   }
 
-  private toPublic(u: {
-    userId: number;
-    email: string;
-    displayName: string;
-    role: string;
-    active: boolean;
-  }): PublicUser {
-    return { userId: u.userId, email: u.email, displayName: u.displayName, role: u.role, active: u.active };
+  private toPublic(
+    u: {
+      userId: number;
+      email: string;
+      displayName: string;
+      role: string;
+      active: boolean;
+    },
+    kishus: string[] = [],
+  ): PublicUser {
+    return {
+      userId: u.userId,
+      email: u.email,
+      displayName: u.displayName,
+      role: u.role,
+      active: u.active,
+      kishus,
+    };
   }
 
   sign(u: PublicUser): string {
@@ -63,7 +76,12 @@ export class AuthService {
     if (!u || !u.active) throw new UnauthorizedException('メールアドレスまたはパスワードが違います');
     const ok = await bcrypt.compare(password, u.passwordHash);
     if (!ok) throw new UnauthorizedException('メールアドレスまたはパスワードが違います');
-    return this.toPublic(u);
+    const kishus = await this.prisma.userKishu.findMany({
+      where: { userId: u.userId },
+      select: { kishu: true },
+      orderBy: { kishu: 'asc' },
+    });
+    return this.toPublic(u, kishus.map((k) => k.kishu));
   }
 
   private async assertNotLastAdmin(userId: number, nextActive: boolean, nextRole: string): Promise<void> {

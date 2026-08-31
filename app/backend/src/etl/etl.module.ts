@@ -1,15 +1,17 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { EtlService } from './etl.service';
 import { IngestService } from './ingest.service';
 import { IngestController } from './ingest.controller';
 import { IngestUploadInterceptor } from './ingest-upload.interceptor';
 import { BatchLockService } from './batch-lock.service';
+import { IngestScheduleService } from './ingest-schedule.service';
 import { AuditModule } from '../audit/audit.module';
+import { PartsModule } from '../parts/parts.module';
 
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, forwardRef(() => PartsModule)],
   controllers: [IngestController],
-  providers: [EtlService, IngestService, BatchLockService, IngestUploadInterceptor],
+  providers: [EtlService, IngestService, IngestScheduleService, BatchLockService, IngestUploadInterceptor],
   exports: [EtlService, BatchLockService],
 })
 export class EtlModule {}

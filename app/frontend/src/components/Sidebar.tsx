@@ -13,6 +13,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { path: routes.parts, label: '部品一覧', icon: '☰' },
   { path: routes.heatmap, label: '工程ヒートマップ', icon: '▦' },
+  { path: routes.watch, label: '要ウォッチ', icon: '👁' },
   { path: routes.troubles, label: '困りごと', icon: '⚠' },
   { path: routes.ingest, label: 'データ取込', icon: '↓', adminOnly: true },
   { path: routes.owners, label: '担当者', icon: '👤', adminOnly: true },
@@ -26,12 +27,14 @@ export function Sidebar({
   me,
   asof,
   troubleCount,
+  watchCount,
   onLogout,
 }: {
   admin: boolean;
   me: Me;
   asof: string;
   troubleCount: number;
+  watchCount: number;
   onLogout: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(LS_KEY) === '1');
@@ -46,6 +49,7 @@ export function Sidebar({
 
   const isActive = (path: string) => {
     if (path === routes.parts) return screen === 'parts' || screen === 'detail';
+    if (path === routes.watch) return screen === 'watch';
     if (path === routes.masters) return screen === 'masters';
     return location.pathname === path;
   };
@@ -81,11 +85,17 @@ export function Sidebar({
               {collapsed && n.path === routes.troubles && troubleCount > 0 && (
                 <span className="nav-badge nav-badge-icon">{troubleCount > 99 ? '99+' : troubleCount}</span>
               )}
+              {collapsed && n.path === routes.watch && watchCount > 0 && (
+                <span className="nav-badge nav-badge-icon">{watchCount > 99 ? '99+' : watchCount}</span>
+              )}
             </span>
             <span className="nav-label">
               {n.label}
               {!collapsed && n.path === routes.troubles && troubleCount > 0 && (
                 <span className="nav-badge">{troubleCount > 99 ? '99+' : troubleCount}</span>
+              )}
+              {!collapsed && n.path === routes.watch && watchCount > 0 && (
+                <span className="nav-badge">{watchCount > 99 ? '99+' : watchCount}</span>
               )}
             </span>
           </NavLink>

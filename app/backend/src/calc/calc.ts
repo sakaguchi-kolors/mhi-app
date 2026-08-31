@@ -232,7 +232,9 @@ export function computePart(
         if (currentIdx >= 0) for (let k = currentIdx; k <= i; k++) needToMs += ltOf(cells[k].shop);
         else needToMs = ltOf(c.shop);
         const daysLeftMs = msDue ? dayDiff(msDue, asOf, o.holidays) : 0;
-        cell.mcolor = bufferColor(daysLeftMs - needToMs, green, yellow);
+        const behind = daysLeftMs - needToMs;
+        cell.mcolor = bufferColor(behind, green, yellow);
+        cell.msBehind = behind;
       }
     }
     if (c.gaic) {

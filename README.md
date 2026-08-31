@@ -9,7 +9,9 @@
 | [技術選定](doc/技術選定.md) | 採用技術・構成・選定理由 |
 | [環境構築手順](app/README.md) | ローカル開発環境（Mac + Docker + Node.js） |
 | [デプロイ手順（AWS 検証環境）](doc/開発検証デプロイ手順.md) | AWS Windows Server への検証デプロイ |
-| [デプロイ手順（先方 Windows Server）](doc/WindowsServerデプロイ手順.md) | 本番サーバーへの初回デプロイ・アップデート |
+| [デプロイ手順（先方 Windows Server）](doc/WindowsServerデプロイ手順.md) | 本番サーバーへの初回デプロイ・アップデート（インターネットあり） |
+| [オフライン構築手順](doc/オフライン構築手順.md) | 先方（外通信不可）向け。インストーラ同梱キット + Box |
+| [先方アップデート手順（2026-08-31）](doc/先方アップデート手順_20260831.md) | 既存サーバーへの機能反映（自動取込・詳細ポップアップ等） |
 | [フェーズ2 提案まとめ](doc/フェーズ2_提案まとめ.md) | リリース後に着手する追加機能の提案と実装状況（`develop`） |
 | [フェーズ2 develop 実装まとめ](doc/フェーズ2_develop実装まとめ.md) | `develop` で追加した機能と今後の予定 |
 | [工程ヒートマップ](doc/フェーズ2_工程ヒートマップ.md) | フェーズ2 で実装した工程混雑可視化の仕様 |
@@ -46,19 +48,18 @@ cd ../frontend && npm install && npm run dev
 
 ## クイックスタート（Windows Server デプロイ）
 
-先方本番は **GitHub 非利用**。開発側で納品 ZIP を作成し、サーバーへ受け渡します。
+先方本番は **GitHub 非利用**かつ **インターネット不可**。ビルド用 Windows EC2 でオフラインキットを作り、Box で渡します。
 
-```bash
-# 開発 PC（Mac）で納品 ZIP 作成
-cd app/deploy && ./make-release.sh
+```powershell
+# ビルド用 Windows EC2
+cd app\deploy
+.\make-offline-kit.ps1
 ```
 
 ```powershell
-# 先方サーバー（初回）
-Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-# 納品 ZIP を C:\apps\mhi-app\ に展開
-cd C:\apps\mhi-app\app\deploy
-.\setup-server.ps1
+# 先方 / 検証（初回・オフライン）
+# ZIP を展開して
+.\setup-offline.ps1
 ```
 
-詳細は [デプロイ手順（先方 Windows Server）](doc/WindowsServerデプロイ手順.md) を参照。
+詳細は [オフライン構築手順](doc/オフライン構築手順.md) を参照。

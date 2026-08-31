@@ -55,4 +55,11 @@ describe('masters.repository modelToRow', () => {
     expect(row.archived).toBe(false);
     expect(row.shop_job).toBe('7P31::001');
   });
+
+  it('keeps vendor master but hides it from the default tab list', () => {
+    const vendor = MASTERS.find((d) => d.name === 'vendor');
+    expect(vendor).toBeTruthy();
+    expect(vendor?.hidden).toBe(true);
+    expect(MASTERS.filter((d) => !d.hidden).some((d) => d.name === 'vendor')).toBe(false);
+  });
 });

@@ -2,8 +2,10 @@
 
 AWS 検証環境で実際に構築した手順をもとに、**先方 Windows Server への初回デプロイ**と**機能アップデート**の手順をまとめたものです。
 
-> **先方環境では GitHub / Git は使いません。**  
-> 開発側が作成した **納品 ZIP** を USB・社内ファイル共有・VPN 経由などで受け取り、サーバー上で展開して `deploy.ps1` を実行する運用です。
+> **先方サーバーはインターネットに出られない。** Chocolatey / `npm ci` 前提の本手順（`setup-server.ps1`）は先方では使えない。  
+> 先方と、先方と同じ確認をする検証は **[オフライン構築手順.md](./オフライン構築手順.md)**（`make-offline-kit.ps1` / Box 受け渡し）を使う。
+>
+> 以下はインターネットがある環境向けの従来手順。
 
 ---
 
@@ -41,8 +43,8 @@ PostgreSQL 18 (DB: mop)
 |------|------|
 | OS | Windows Server 2019 または 2022 |
 | RDP 接続 | VPN 経由か、接続先 IP / アカウント |
-| インターネット | `npm ci` / Chocolatey が使えるか（**GitHub へのアクセスは不要**） |
-| ファイル受け渡し | 納品 ZIP をサーバーへコピーする方法（USB / 共有フォルダ / 社内転送） |
+| インターネット | 先方は不可。オフラインキットを使う（[オフライン構築手順.md](./オフライン構築手順.md)） |
+| ファイル受け渡し | **Box** |
 | 管理者権限 | 初回セットアップ用 |
 | ポート | 80（HTTP）、443（HTTPS 推奨） |
 | CSV 配置先 | 共有フォルダパス（本番取込元） |
@@ -146,7 +148,8 @@ cd C:\apps\mhi-app\app\deploy
 | `.env` 生成 | JWT_SECRET 自動生成 |
 | Windows Service | `MhiProgressApi` 登録 |
 | IIS サイト | `MhiApp`（port 80） |
-| 初回デプロイ | build + migrate + seed + etl |
+| 初回デプロイ | build + migrate + etl + seed + recompute |
+| 初回のみ追加（20260818 キット） | `ensure-m-param.ps1` + seed + recompute（`setup-offline` 直後。§4-5 参照） |
 
 Git は**インストールしません**（先方運用では不要）。
 
@@ -299,15 +302,10 @@ npm run etl
 
 #### 本番（定期実行）
 
-Windows タスクスケジューラで以下を定期実行:
+管理者画面「データ取込」で **自動取込** を有効にし、時刻（例: 08:00・13:00）を指定する。  
+Windows サービス `MhiProgressApi` が動いていれば、日本時間の指定時刻に `CSV_DIR` を取り込む（タスクスケジューラ不要）。
 
-```text
-プログラム: C:\Program Files\nodejs\node.exe
-引数:     dist\scripts\etl.cli.js
-作業Dir:  C:\apps\mhi-app\app\backend
-```
-
-または PowerShell ラッパー:
+緊急・手動は従来どおり:
 
 ```powershell
 cd C:\apps\mhi-app\app\backend
@@ -372,7 +370,7 @@ C:\apps\mhi-backup\       pg_dump（毎日 03:00、60日保持）
 C:\inetpub\mhi\           IIS 配信（frontend/dist + web.config）
 ```
 
-セットアップ／`deploy.ps1` がタスク `MhiApp-BackupDb`（毎日 03:00）と `MhiApp-RotateLogs`（毎日 00:15、60日超の API / IIS / PostgreSQL ログ削除）を登録する。
+セットアップ／`deploy.ps1` がタスク `MhiApp-BackupDb`（毎日 03:00）と `MhiApp-RotateLogs`（毎日 00:15、60日超の API / IIS / PostgreSQL ログ削除）を登録する。詳細は [オフライン構築手順.md](./オフライン構築手順.md) の日常運用。
 
 ---
 
@@ -413,7 +411,7 @@ Get-Website
 | Basic 認証 | 付与（URL ゲート） | 任意（VPN 内なら省略可） |
 | CSV | `C:\apps\mhi-app\data\csv` | 共有フォルダ |
 | HTTPS | 後から設定 | 先方証明書を使用 |
-| ETL | 手動 | タスクスケジューラ |
+| ETL | 手動または自動取込 | 画面の自動取込（時刻指定） |
 | ソース更新 | 納品 ZIP（または社内 Git + `-GitPull`） | **納品 ZIP のみ** |
 
 **デプロイコマンド（`setup-server.ps1` / `deploy.ps1`）は同一** です。

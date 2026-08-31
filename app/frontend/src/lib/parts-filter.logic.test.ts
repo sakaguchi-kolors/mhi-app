@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchPartsFilter, computePartsKpi } from './parts-filter.logic';
+import { matchPartsFilter, computePartsKpi, resolveKishuFilter } from './parts-filter.logic';
 import type { Part } from '../types';
 
 const basePart = (over: Partial<Part> = {}): Part => ({
@@ -34,6 +34,12 @@ describe('parts-filter.logic', () => {
     expect(matchPartsFilter(basePart({ color: 'green' }), state, null)).toBe(false);
   });
 
+  it('includes shelved watched parts when includeShelved is set', () => {
+    const state = { filter: 'all' as const, cat: 'all', kishu: 'all', owner: 'all', query: '', showShelved: false, includeShelved: true, stagnantThreshold: 10 };
+    expect(matchPartsFilter(basePart({ shelved: true, watch: true }), state, null)).toBe(true);
+    expect(matchPartsFilter(basePart({ shelved: false, watch: true }), state, null)).toBe(true);
+  });
+
   it('excludes shelved unless toggled', () => {
     const state = { filter: 'all' as const, cat: 'all', kishu: 'all', owner: 'all', query: '', showShelved: false, stagnantThreshold: 10 };
     expect(matchPartsFilter(basePart({ shelved: true }), state, null)).toBe(false);
@@ -52,6 +58,15 @@ describe('parts-filter.logic', () => {
     const kpi = computePartsKpi(parts, { filter: 'all', cat: 'all', kishu: 'all', owner: 'all', query: 'nomatch', showShelved: false, stagnantThreshold: 10 });
     expect(kpi.r).toBe(1);
     expect(kpi.g).toBe(1);
+  });
+
+  it('resolveKishuFilter drops leftover mine for admin or empty kishus', () => {
+    expect(resolveKishuFilter('mine', false, [])).toBe('all');
+    expect(resolveKishuFilter('mine', true, [])).toBe('all');
+    expect(resolveKishuFilter('mine', true, ['K1'])).toBe('mine');
+    expect(resolveKishuFilter('K1', false, [])).toBe('K1');
+    expect(resolveKishuFilter(null, true, ['K1'])).toBe('mine');
+    expect(resolveKishuFilter(null, false, [])).toBe('all');
   });
 
   it('computePartsKpi counts unassigned on red', () => {

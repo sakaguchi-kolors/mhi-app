@@ -5,6 +5,8 @@ export const routes = {
   parts: '/parts',
   part: (id: string) => `/parts/${encodeURIComponent(id)}`,
   heatmap: '/heatmap',
+  watch: '/watch',
+  watchPart: (id: string) => `/watch/${encodeURIComponent(id)}`,
   troubles: '/troubles',
   ingest: '/ingest',
   owners: '/owners',
@@ -21,13 +23,15 @@ export function isMobilePath(pathname: string): boolean {
   return pathname === routes.mobile || pathname.startsWith(`${routes.mobile}/`);
 }
 
-export type ScreenKey = 'parts' | 'detail' | 'heatmap' | 'troubles' | 'ingest' | 'owners' | 'masters';
+export type ScreenKey = 'parts' | 'detail' | 'heatmap' | 'troubles' | 'watch' | 'ingest' | 'owners' | 'masters';
 
 /** パスからサイドバーアクティブ判定用の画面キー */
 export function screenFromPath(pathname: string): ScreenKey {
   if (pathname.startsWith('/parts/') && pathname !== '/parts') return 'detail';
+  if (pathname.startsWith('/watch/') && pathname !== '/watch') return 'watch';
   if (pathname === routes.heatmap) return 'heatmap';
   if (pathname === routes.troubles) return 'troubles';
+  if (pathname === routes.watch) return 'watch';
   if (pathname === routes.ingest) return 'ingest';
   if (pathname === routes.owners) return 'owners';
   if (pathname === routes.masters || pathname.startsWith(`${routes.masters}/`)) return 'masters';
@@ -47,6 +51,7 @@ export const PAGE_TITLES: Record<ScreenKey, string> = {
   detail: '部品詳細',
   heatmap: '工程ヒートマップ',
   troubles: '困りごと',
+  watch: '要ウォッチ部品',
   ingest: 'データ取込',
   owners: '担当者',
   masters: 'マスタ管理',

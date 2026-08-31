@@ -111,6 +111,7 @@ model Timeline {
   msPassed    Boolean?  @map("ms_passed")
   msColor     String?   @map("ms_color") // 未通過マイルストンの色 red/yellow/green
   msDue       DateTime? @map("ms_due") @db.Date
+  msBehind    Int?      @map("ms_behind") // 次MSまでの余裕（負=遅れ日数）
   gaic        Boolean   @default(false) // 外注区間か
   gaicStatus  String?   @map("gaic_status") // blue/yellow/red
   gaicPhase   String?   @map("gaic_phase") // wait_out/out_done/wait_in/in_done
@@ -151,6 +152,15 @@ model Shelved {
   flaggedAt DateTime? @map("flagged_at") @db.Timestamptz()
 
   @@map("t_shelved")
+}
+
+// 要ウォッチ部品。専用一覧で確認する。
+model Watch {
+  osId      String    @id @map("os_id")
+  flagged   Boolean   @default(false)
+  flaggedAt DateTime? @map("flagged_at") @db.Timestamptz()
+
+  @@map("t_watch")
 }
 
 model Note {

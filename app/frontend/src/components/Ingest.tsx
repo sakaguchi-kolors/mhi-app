@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { IngestInfo } from '../types';
+import type { IngestInfo, IngestSchedule } from '../types';
 import * as api from '../api';
 import type { ToastState } from './Toast';
 import { Loading } from './Loading';
+import { IngestSchedulePanel } from './ingest/IngestSchedulePanel';
 
 const MB = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
 const fmtTime = (s: string | null) => (s ? s.replace('T', ' ').slice(0, 19) : '—');
@@ -26,17 +27,22 @@ export function Ingest({ toast, onIngested }: { toast: ToastState; onIngested: (
   const [uploadProgress, setUploadProgress] = useState<{ key: string; label: string; pct: number } | null>(null);
   const [draft, setDraft] = useState<UploadDraft>(emptyDraft);
   const [now, setNow] = useState(() => Date.now());
-  const prevState = useRef<string | null>(null);
+  const loadSeq = useRef(0);
+  const trackedJob = useRef<{ id: string; state: string } | null>(null);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
-      setInfo(await api.getIngest());
+      const data = await api.getIngest();
+      if (seq !== loadSeq.current) return;
+      setInfo(data);
     } catch (e) {
+      if (seq !== loadSeq.current) return;
       console.error(e);
       toast.show('取込情報の取得に失敗しました');
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [toast]);
 
@@ -51,19 +57,24 @@ export function Ingest({ toast, onIngested }: { toast: ToastState; onIngested: (
     return () => clearInterval(t);
   }, [running, load]);
 
-  // running -> done/error への遷移でトースト＆一覧リロード
+  // 同一ジョブが running -> done/error になったときだけトースト（古い lastJob の error で誤爆しない）
   useEffect(() => {
-    const st = info?.job?.state ?? null;
-    if (prevState.current === 'running' && st !== 'running') {
-      if (st === 'done') {
-        const r = info?.job?.result;
+    const job = info?.job;
+    if (!job) {
+      trackedJob.current = null;
+      return;
+    }
+    const prev = trackedJob.current;
+    if (prev?.id === job.id && prev.state === 'running' && job.state !== 'running') {
+      if (job.state === 'done') {
+        const r = job.result;
         toast.show(r ? `取込完了：${r.parts}部品を更新` : '取込完了');
         onIngested().catch(() => {});
-      } else if (st === 'error') {
+      } else if (job.state === 'error') {
         toast.show('取込に失敗しました');
       }
     }
-    prevState.current = st;
+    trackedJob.current = { id: job.id, state: job.state };
   }, [info, toast, onIngested]);
 
   const start = async () => {
@@ -73,7 +84,10 @@ export function Ingest({ toast, onIngested }: { toast: ToastState; onIngested: (
       const r = await api.runIngest();
       if (r.status === 409) toast.show('別の取込が実行中です');
       else if (r.status === 422) toast.show('取込前チェックでエラーがあります（下表を確認）');
-      else if (r.started) { toast.show('取込を開始しました'); prevState.current = 'running'; }
+      else if (r.started) {
+        toast.show('取込を開始しました');
+        if (r.job) trackedJob.current = { id: r.job.id, state: 'running' };
+      }
       await load();
     } catch (e) {
       console.error(e);
@@ -132,12 +146,20 @@ export function Ingest({ toast, onIngested }: { toast: ToastState; onIngested: (
       <div className="page-head">
         <div>
           <h2>データ取込</h2>
-          <p>CSVをアップロードするか、指定フォルダに配置したファイルを取り込みます（本番は同じ処理をタスクスケジューラで定期実行）。取込は洗い替えで、担当者・困りごと・メモは温存されます。</p>
+          <p>CSVをアップロードするか、指定フォルダに配置したファイルを取り込みます。自動取込の時刻もここで指定できます。取込は洗い替えで、担当者・困りごと・メモは温存されます。</p>
         </div>
         <button className="back-btn" onClick={start} disabled={starting || running || uploading || !info?.preflightOk}>
           {running ? '取込中…' : starting ? '開始中…' : '⬇ 取込実行'}
         </button>
       </div>
+
+      <IngestSchedulePanel
+        info={info}
+        toast={toast}
+        onSaved={(schedule: IngestSchedule) => {
+          setInfo((prev) => (prev ? { ...prev, schedule } : prev));
+        }}
+      />
 
       <div className="panel" style={{ marginBottom: 16 }}>
         <h3 className="pt">CSVアップロード</h3>

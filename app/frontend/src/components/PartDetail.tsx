@@ -5,7 +5,19 @@ import { AdjustSupport } from './AdjustSupport';
 import { GaicBadges } from './GaicBadges';
 import { PartCongestion } from './PartCongestion';
 
-export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: { part: Part; stagnantThreshold?: number; onBack: () => void; onNote: (id: string, note: string) => void }) {
+export function PartDetail({
+  part: p,
+  stagnantThreshold = 10,
+  onBack,
+  onNote,
+  closeLabel = '← 一覧へ戻る',
+}: {
+  part: Part;
+  stagnantThreshold?: number;
+  onBack: () => void;
+  onNote: (id: string, note: string) => void;
+  closeLabel?: string;
+}) {
   const [note, setNote] = useState(p.note ?? '');
   // 部品切替時のみ初期化（p.note を依存に含めると refetch で入力中テキストが消える）
   // eslint-disable-next-line react-hooks/exhaustive-deps -- p.id のみ意図的
@@ -15,18 +27,29 @@ export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: 
   const need = p.daysLeft - p.buffer;
   const perShop = p.remainShops > 0 ? Math.round((need / p.remainShops) * 10) / 10 : 0;
   const flag = p.stagnant >= stagnantThreshold;
+  const currentCell = p.timeline.find((t) => t.status === 'current');
+  const nextMs = p.timeline.find((t) => t.milestone && !t.mpassed);
+  const msTotal = p.timeline.filter((t) => t.milestone).length;
+  const msDone = p.timeline.filter((t) => t.milestone && t.mpassed).length;
+
+  const formatMsBehind = (n: number | undefined): string => {
+    if (n == null) return '—';
+    if (n > 0) return `余裕 +${n}日`;
+    if (n < 0) return `${Math.abs(n)}日遅れ`;
+    return '期限当日';
+  };
 
   return (
     <section>
       <div className="detail-head">
         <div className="detail-title">
-          <h2>{p.name}</h2>
+          <h2 id="part-detail-title">{p.name}</h2>
           <div className="detail-meta">
             <span className="pno">{p.partNo} #{p.inst}</span>　<span className="cat-tag">{p.category}</span>{' '}
             <span className={`state-pill ${p.color}`} style={{ fontSize: 12, padding: '4px 10px' }}>{jc(p.color)} {p.buffer >= 0 ? '+' : ''}{p.buffer}日</span>
           </div>
         </div>
-        <button className="back-btn" onClick={onBack}>← 一覧へ戻る</button>
+        <button className="back-btn" onClick={onBack}>{closeLabel}</button>
       </div>
 
       <div className="detail-grid">
@@ -42,7 +65,7 @@ export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: 
                     <span className="tl-name">{i + 1}. {t.name}</span>{' '}
                     {t.milestone && (t.mpassed
                       ? <span className="ms-tag passed">✓検査 通過済</span>
-                      : <span className={`ms-tag ${t.mcolor ?? ''}`}>▼検査{t.mdue ? ` 期日${t.mdue}` : ''}</span>)}
+                      : <span className={`ms-tag ${t.mcolor ?? ''}`}>▼検査{t.mdue ? ` 期日${t.mdue}` : ''}{t.msBehind != null ? `（${formatMsBehind(t.msBehind)}）` : ''}</span>)}
                     {t.gaic && <GaicBadges t={t} />}
                     {t.gvendor && <span className="gaic-vendor">{t.gvendor}</span>}
                     <div className="tl-shop">Shop {t.shop}</div>
@@ -58,6 +81,23 @@ export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: 
         </div>
 
         <div>
+          <div className="panel" style={{ marginBottom: 16 }}>
+            <h3 className="pt">中間マイルストン（ネックジョブ）</h3>
+            <p className="pt-sub">検査工程の進捗と、次の検査までの余裕日数（マイナス＝遅れ）。</p>
+            <div className="calc">
+              <div className="row"><span>検査通過</span><span className="val">{msDone} / {msTotal} 箇所</span></div>
+              <div className="row"><span>現在の工程</span><span className="val">{currentCell ? `${currentCell.name}（Shop ${currentCell.shop}）` : p.currentShop}</span></div>
+              {nextMs ? (
+                <>
+                  <div className="row"><span>次の検査</span><span className="val">{nextMs.name}{nextMs.mdue ? ` 期日 ${nextMs.mdue}` : ''}</span></div>
+                  <div className="row"><span>次検査まで</span><span className={`val ${(nextMs.msBehind ?? 0) < 0 ? 'red' : 'green'}`}>{formatMsBehind(nextMs.msBehind)}</span></div>
+                </>
+              ) : (
+                <div className="row"><span>次の検査</span><span className="val">すべて通過済み</span></div>
+              )}
+            </div>
+          </div>
+
           <div className="panel" style={{ marginBottom: 16 }}>
             <h3 className="pt">なぜこの状態か（判定根拠）</h3>
             <p className="pt-sub">残納期とShop所要日数の差＝バッファで色を判定。</p>
@@ -79,10 +119,11 @@ export function PartDetail({ part: p, stagnantThreshold = 10, onBack, onNote }: 
                 {flag ? <b style={{ color: 'var(--red)' }}>🚩 {stagnantThreshold}日以上：レッドフラッグ</b> : `${stagnantThreshold}日未満：問題なし`}
               </div>
             </div>
-            <div style={{ marginTop: 6 }}>
-              {p.urgent && <span className="flag urg">赤紙（緊急品）</span>}
-              {p.shortage && <span className="flag sho">子部品ショーテージ</span>}
-            </div>
+            {p.urgent && (
+              <div style={{ marginTop: 6 }}>
+                <span className="flag urg">赤紙（緊急品）</span>
+              </div>
+            )}
           </div>
 
           <div className="panel">

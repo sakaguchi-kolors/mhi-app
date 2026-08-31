@@ -3,7 +3,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { milestoneRowKey, parseMilestoneRowKey } from './milestone-mark.util';
-import { loadMilestoneUsageStats } from './milestone-usage.util';
+import { isShopJobMasterSource, loadMilestoneUsageStats } from './milestone-usage.util';
 import { DUE_SOURCE_KINDS, isDefaultKishuDuePriority, parseDefaultKishuDuePriority, type DueSourceKind } from '../etl/etl-compute.util';
 import type { ColDef, MasterDef } from './masters.def';
 
@@ -113,7 +113,7 @@ export class MastersRepository {
       loadMilestoneUsageStats(this.prisma),
     ]);
     const markMap = new Map(marks.map((m) => [milestoneRowKey(m.shop, m.job), m]));
-    return shops.map((sm) => {
+    return shops.filter((sm) => isShopJobMasterSource(sm.source)).map((sm) => {
       const shop = String(sm.shop);
       const job = String(sm.job);
       const key = milestoneRowKey(shop, job);
@@ -235,6 +235,10 @@ export class MastersRepository {
         const shop = String(body.shop ?? '');
         const job = String(body.job ?? '');
         if (!shop || !job) throw new BadRequestException('SHOP と JOB が必要です');
+        const smRow = await this.prisma.shopMaster.findUnique({ where: { shop_job: { shop, job } } });
+        if (!smRow || !isShopJobMasterSource(smRow.source)) {
+          throw new BadRequestException('中間マイルストンは SHOP_JOB マスタの工程のみ指定できます');
+        }
         const isMs = body.is_milestone === true || body.is_milestone === 'true';
         const gaic = body.gaic === true || body.gaic === 'true';
         const key = milestoneRowKey(shop, job);

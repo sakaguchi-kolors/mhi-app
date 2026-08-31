@@ -12,6 +12,8 @@ type Props = {
   ownerOpts: string[];
   kishus: string[];
   admin?: boolean;
+  myKishus?: string[];
+  hideShelvedToggle?: boolean;
   onSetFilter: (f: ChipFilter) => void;
   onSetQuery: (v: string) => void;
   onSetCat: (v: string) => void;
@@ -32,7 +34,9 @@ export function PartsListToolbar({
   cats,
   ownerOpts,
   kishus,
+  myKishus,
   admin,
+  hideShelvedToggle,
   onSetFilter,
   onSetQuery,
   onSetCat,
@@ -77,15 +81,20 @@ export function PartsListToolbar({
       </select>
       <select className="filter" value={kishu} onChange={(e) => onSetKishu(e.target.value)}>
         <option value="all">機種：すべて</option>
-        {kishus.map((k) => (
+        {myKishus && myKishus.length > 0 && (
+          <option value="mine">機種：担当機種のみ</option>
+        )}
+        {kishus.filter((k) => k !== 'all' && k !== 'mine').map((k) => (
           <option key={k} value={k}>
             {k}
           </option>
         ))}
       </select>
+      {!hideShelvedToggle && (
       <span className={`chip ${showShelved ? 'active' : ''}`} onClick={onToggleShelved} title="保留にした部品だけを表示">
         保留だけ表示{shelvedCount > 0 ? `（${shelvedCount}）` : ''}
       </span>
+      )}
       {admin && onAutoAssign && (
         <button className="chip assign-btn" onClick={onAutoAssign} title="未割当の部品を機種→担当チームに基づいて自動割り当て（既存の割当は変更しません）">
           ⚙ 未割当を自動割り当て

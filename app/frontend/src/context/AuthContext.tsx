@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as api from '../api';
 import type { Me } from '../api';
+import { clearAppQueryCache, notifyAuthChange } from '../lib/queryClient';
+import { useAuthSync } from '../hooks/useAuthSync';
 
 interface AuthContextValue {
   me: Me | null;
@@ -44,10 +46,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const onExpired = () => setMe(null);
+    const onExpired = () => {
+      setMe(null);
+      clearAppQueryCache();
+    };
     window.addEventListener('auth:expired', onExpired);
     return () => window.removeEventListener('auth:expired', onExpired);
   }, []);
+
+  useAuthSync(setMe);
 
   const logout = useCallback(async () => {
     try {
@@ -56,6 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
     setMe(null);
+    clearAppQueryCache();
+    notifyAuthChange();
   }, []);
 
   const value = useMemo(

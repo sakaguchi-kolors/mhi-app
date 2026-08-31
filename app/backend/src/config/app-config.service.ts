@@ -31,6 +31,9 @@ export class AppConfigService {
   /** 取込ジョブ状態ファイル */
   readonly ingestJobFile = path.resolve(process.cwd(), env('INGEST_JOB_FILE', 'data/ingest-job.json'));
 
+  /** 自動取込スケジュール（時刻指定） */
+  readonly ingestScheduleFile = path.resolve(process.cwd(), env('INGEST_SCHEDULE_FILE', 'data/ingest-schedule.json'));
+
   /** CSVアップロード1ファイルあたりの上限（MB）。OCTPuS は 1.8GB 規模になり得る */
   readonly ingestUploadMaxMb = num('INGEST_UPLOAD_MAX_MB', 4096);
   readonly ingestUploadMaxBytes = this.ingestUploadMaxMb * 1024 * 1024;

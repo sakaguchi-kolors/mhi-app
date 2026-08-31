@@ -13,9 +13,11 @@ async function main(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn', 'log'] });
   const prisma = app.get(PrismaService);
 
-  // 既存環境にも新しいキーだけを足せるよう、常に不足分を補う（既存値は上書きしない）
-  const addedParams = await prisma.param.createMany({ data: DEFAULT_PARAMS, skipDuplicates: true });
-  if (addedParams.count > 0) console.log(`[seed] m_param seeded: ${addedParams.count}`);
+  // ETL 取込で AS_OF 等が先に入ると count>0 になり、旧ロジックでは SHOP_LT_DAYS 等が欠落する
+  const ensured = await prisma.param.createMany({ data: DEFAULT_PARAMS, skipDuplicates: true });
+  if (ensured.count > 0) {
+    console.log(`[seed] m_param ensured: +${ensured.count} / ${DEFAULT_PARAMS.length} keys`);
+  }
 
   if ((await prisma.milestone.count()) === 0) {
     const shopJobs = await prisma.shopMaster.findMany({ select: { shop: true, job: true, name: true } });

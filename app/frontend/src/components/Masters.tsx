@@ -44,7 +44,7 @@ function isValidMasterTab(name: string, defs: MasterDef[]): boolean {
 const TAB_BLURB: Record<string, string> = {
   param: '緊急度の色・所要日数など、算出の係数を設定します。保存すると一覧に自動反映されます。',
   kishu_due_priority: '標準の優先順位を設定し、必要な機種のみ個別設定します。標準に合わせる機種は標準変更に自動で追随します。',
-  milestone: 'SHOP_JOBマスタを基本とし、FLEXSCHEにのみ存在する工程は取込時に自動補完されます。利用中でない工程は過去マスタへ自動退避されます。工程マイルストン(◎)・外注(外)をチェックで指定します。右下の「更新」で保存・反映します。',
+  milestone: 'SHOP_JOBマスタの工程のみが対象です。FLEXSCHEのみの工程は中間マイルストンに含めません。利用中でない工程は過去マスタへ自動退避されます。工程マイルストン(◎)・外注(外)をチェックで指定します。右下の「更新」で保存・反映します。',
   shop_lt: 'Shopごとの所要日数の例外設定です。未登録は既定LTを使います。保存するとバッファ等に自動反映されます。',
   calendar: '休日を登録すると、残日数計算からその日を除外します。保存すると残日数・バッファに自動反映されます。',
   vendor: '注文番号から外注先名を表示するための対応表です。保存するとタイムライン表示にすぐ反映されます。',
@@ -296,7 +296,7 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
       </div>
 
       <div className="toolbar master-tabs">
-        {defs.map((d) => (
+        {defs.filter((d) => !d.hidden).map((d) => (
           <button
             key={d.name}
             type="button"
@@ -319,6 +319,9 @@ export function Masters({ parts, onRecompute, onReload, toast }: Props) {
 
       <div className="panel panel-loading-wrap">
         <p className="mnote">{TAB_BLURB[cur] ?? def?.note}</p>
+        {def?.hidden && (
+          <p className="mnote">このマスタは通常のタブから非表示です。API・算出（外注先名の表示）は有効なままです。</p>
+        )}
         {rowsLoading && (
           <Loading variant="veil" label="マスタデータを読み込み中…" />
         )}

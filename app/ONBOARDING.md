@@ -148,7 +148,7 @@ app/
 | `m_shop_lt` | Shop別 LT 上書き |
 | `m_calendar` | 休日（稼働日ベースの残日数） |
 | `m_category` | 部品番号→完成品分類（正規表現） |
-| `m_vendor` | 注文番号→外注先名 |
+| `m_vendor` | 注文番号→外注先名（画面タブは非表示。API・算出は有効） |
 | `m_user` + `m_user_kishu` | 担当者（ログインユーザー）と担当機種 |
 
 編集は画面「マスタ管理」→ 保存時に自動反映（または「🔄 再計算」）。
@@ -178,7 +178,6 @@ app/
 ## 8. 未決論点
 
 - **最終納期の採用元**（DUE_SOURCE: flexsche / pbs）
-- **子部品欠品の判定粒度**
 - **一覧のスケール**（2万件規模。仮想スクロール or サーバページングは未実装）
 - Phase2: AI予測・自動収集・算出層の独立サービス化
 
@@ -191,7 +190,8 @@ app/
 | [app/README.md](README.md) | 環境構築・API一覧・設定 |
 | [doc/技術選定.md](../doc/技術選定.md) | 採用技術・選定理由 |
 | [doc/データベース.md](../doc/データベース.md) | テーブル群・データフロー |
-| [doc/WindowsServerデプロイ手順.md](../doc/WindowsServerデプロイ手順.md) | 本番デプロイ |
+| [doc/WindowsServerデプロイ手順.md](../doc/WindowsServerデプロイ手順.md) | 本番デプロイ（インターネットあり） |
+| [doc/オフライン構築手順.md](../doc/オフライン構築手順.md) | 先方（外通信不可）向けオフラインキット |
 | [moc/mop-app-handoff/](../moc/mop-app-handoff/) | **参照専用**の旧プロトタイプ（Express版） |
 
 ---

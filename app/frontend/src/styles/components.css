@@ -29,6 +29,20 @@
   .ingest-upload-row{display:grid;grid-template-columns:140px 1fr minmax(120px,1.4fr);gap:10px;align-items:center;font-size:13px;}
   .ingest-upload-label{font-weight:600;color:var(--text);}
   .ingest-upload-name{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ingest-schedule{display:grid;gap:10px;}
+  .ingest-schedule-toggle{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;}
+  .ingest-schedule-times{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+  .ingest-time-chip{
+    display:inline-flex;align-items:center;gap:4px;
+    background:#eef2f8;border:1px solid var(--line);border-radius:999px;
+    padding:4px 8px 4px 12px;font-size:13px;font-weight:700;
+  }
+  .ingest-time-remove{
+    border:none;background:transparent;cursor:pointer;font-size:16px;line-height:1;color:var(--muted);padding:0 2px;
+  }
+  .ingest-time-remove:hover{color:var(--red);}
+  .ingest-time-add{display:inline-flex;align-items:center;gap:6px;}
+  .ingest-time-add input[type=time]{border:1px solid var(--line);border-radius:10px;padding:6px 8px;font-size:13px;}
   .table-wrap{
     width:100%;
     max-height:var(--table-scroll-max-h);
@@ -143,8 +157,9 @@
   .flag{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;margin:2px 3px 0 0;white-space:nowrap;}
   .flag.stag{background:var(--red-bg);color:var(--red);}
   .flag.urg{background:#3a1d5b;color:#fff;}
-  .flag.sho{background:#7a3b00;color:#fff;}
+  .flag.watch{background:#1a4d6e;color:#fff;}
   .flag.shelved{background:#5a6270;color:#fff;}
+  .own-sel.static{display:inline-block;font-size:12px;padding:7px 8px;min-width:104px;text-align:center;}
   .due{font-weight:700;} .due-late{color:var(--red);} .due-ok{color:var(--text);}
   /* アクション/担当者 */
   .own-wrap{display:flex;flex-direction:column;gap:5px;align-items:center;min-width:118px;}

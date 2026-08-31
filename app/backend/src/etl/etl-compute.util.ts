@@ -22,8 +22,8 @@ export type DueSourceKind = 'flexsche' | 'octopus' | 'pbs';
 
 export const DUE_SOURCE_KINDS: DueSourceKind[] = ['flexsche', 'octopus', 'pbs'];
 
-/** 機種別納期優先順位の標準（PBS → 小日程 → OCTPuS）。m_param 未設定時のフォールバック */
-export const DEFAULT_KISHU_DUE_PRIORITY: DueSourceKind[] = ['pbs', 'flexsche', 'octopus'];
+/** 機種別納期優先順位の標準（PBS → OCTPuS → 小日程）。Flexi/JNDは最後のフォールバック */
+export const DEFAULT_KISHU_DUE_PRIORITY: DueSourceKind[] = ['pbs', 'octopus', 'flexsche'];
 
 export const KISHU_DUE_PRIORITY_PARAM_KEYS = [
   'KISHU_DUE_PRIORITY_1',
@@ -154,6 +154,7 @@ export function buildStatusTimelineRows(
         t.mpassed ?? null,
         t.mcolor ?? null,
         mmddToDate(t.mdue, asOf),
+        t.msBehind ?? null,
         !!t.gaic,
         t.gstat ?? null,
         t.gphase ?? null,

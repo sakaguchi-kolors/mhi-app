@@ -9,10 +9,21 @@ export type PartsFilterState = {
   owner: string;
   query: string;
   showShelved: boolean;
+  /** true のとき保留の有無で落とさない（要ウォッチ一覧） */
+  includeShelved?: boolean;
   stagnantThreshold: number;
   /** 現在滞在中の SHOP コード。ヒートマップから遷移したときだけ入る */
   shop?: string;
+  myKishus?: string[];
 };
+
+/** 管理者や担当機種が無いときは「自分の機種」を残さない */
+export function resolveKishuFilter(saved: string | null, isEngineer?: boolean, myKishus?: string[]): string {
+  if (saved === 'mine' && (!isEngineer || !myKishus?.length)) return 'all';
+  if (saved) return saved;
+  if (isEngineer && myKishus?.length) return 'mine';
+  return 'all';
+}
 
 function matchesPartsQuery(p: Part, query: string): boolean {
   const q = query.trim().toLowerCase();
@@ -26,12 +37,16 @@ export function matchPartsFilter(
   state: PartsFilterState,
   except: 'cat' | 'kishu' | 'owner' | 'chip' | null,
 ): boolean {
-  const { filter, cat, kishu, owner, query, showShelved, stagnantThreshold, shop } = state;
+  const { filter, cat, kishu, owner, query, showShelved, includeShelved, stagnantThreshold, shop, myKishus } = state;
   if (!matchesPartsQuery(p, query)) return false;
-  if ((p.shelved ?? false) !== showShelved) return false;
+  if (!includeShelved && (p.shelved ?? false) !== showShelved) return false;
   if (shop && p.currentShopCode !== shop) return false;
   if (except !== 'cat' && cat !== 'all' && p.category !== cat) return false;
-  if (except !== 'kishu' && kishu !== 'all' && p.kishu !== kishu) return false;
+  if (except !== 'kishu' && kishu !== 'all') {
+    if (kishu === 'mine') {
+      if (!myKishus?.length || !myKishus.includes(p.kishu)) return false;
+    } else if (p.kishu !== kishu) return false;
+  }
   if (except !== 'owner' && owner !== 'all' && (p.owner ?? '未割当') !== owner) return false;
   if (except !== 'chip') {
     if (filter === 'risk' && p.color === 'green') return false;
