@@ -109,17 +109,28 @@ export function PartsList({
   }, [filter, query, cat, owner, kishu, showShelved]);
 
   useEffect(() => {
+    if (watchOnly) setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }));
+  }, [watchOnly]);
+
+  useEffect(() => {
+    const maxIndex = Math.max(0, Math.ceil(total / pageSize) - 1);
+    if (pageIndex > maxIndex) {
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
+    }
+  }, [total, pageSize, pageIndex]);
+
+  useEffect(() => {
     savePartsListView({
       filter,
       query,
       cat,
       owner: defaultOwnerFilter ?? owner,
       showShelved,
-      pageIndex: pagination.pageIndex,
+      pageIndex: watchOnly ? 0 : pagination.pageIndex,
       pageSize: pagination.pageSize,
       sorting,
     }, viewStorageKey);
-  }, [filter, query, cat, owner, defaultOwnerFilter, showShelved, pagination, sorting, viewStorageKey]);
+  }, [filter, query, cat, owner, defaultOwnerFilter, showShelved, pagination, sorting, viewStorageKey, watchOnly]);
 
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const { timelines } = usePartTimelines(visibleIds);
