@@ -9,7 +9,10 @@ $names = @(
   'setup-offline.ps1',
   'deploy-offline.ps1',
   'deploy.ps1',
-  'setup-server.ps1'
+  'setup-server.ps1',
+  'backup-db.ps1',
+  'rotate-logs.ps1',
+  'install-ops-tasks.ps1'
 )
 foreach ($name in $names) {
   $path = Join-Path $dir $name

@@ -270,7 +270,7 @@ New-Item -ItemType Directory -Path $AppRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $SiteRoot -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $AppRoot 'logs') -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $AppRoot 'data\csv') -Force | Out-Null
-robocopy $staging $AppRoot /E /XD data logs /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+robocopy $staging $AppRoot /E /XD data logs backup /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed ($LASTEXITCODE)" }
 
 $appDir = Join-Path $AppRoot 'app'
@@ -355,6 +355,8 @@ if ($service) {
 & $nssmExe set $ServiceName AppStdout (Join-Path $AppRoot 'logs\api.out.log')
 & $nssmExe set $ServiceName AppStderr (Join-Path $AppRoot 'logs\api.err.log')
 & $nssmExe set $ServiceName AppRotateFiles 1
+& $nssmExe set $ServiceName AppRotateSeconds 86400
+& $nssmExe set $ServiceName AppRotateOnline 1
 & $nssmExe set $ServiceName AppExit Default Restart
 & $nssmExe set $ServiceName Start SERVICE_AUTO_START
 

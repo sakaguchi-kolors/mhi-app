@@ -48,7 +48,7 @@ if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
 }
 
 Write-Step "Overwrite $AppRoot from kit (keep data / logs)"
-robocopy $staging $AppRoot /MIR /XD data logs /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+robocopy $staging $AppRoot /MIR /XD data logs backup /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed ($LASTEXITCODE)" }
 
 Write-Step 'Restore .env'
