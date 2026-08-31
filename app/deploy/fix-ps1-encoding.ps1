@@ -12,7 +12,8 @@ $names = @(
   'setup-server.ps1',
   'backup-db.ps1',
   'rotate-logs.ps1',
-  'install-ops-tasks.ps1'
+  'install-ops-tasks.ps1',
+  'watch-health.ps1'
 )
 foreach ($name in $names) {
   $path = Join-Path $dir $name

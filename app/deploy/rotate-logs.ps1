@@ -48,7 +48,7 @@ function Archive-DailyLog([string]$Path) {
 $logDir = Join-Path $AppRoot 'logs'
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 
-foreach ($name in @('ops-backup.log', 'ops-rotate.log')) {
+foreach ($name in @('ops-backup.log', 'ops-rotate.log', 'ops-watch.log')) {
   Archive-DailyLog (Join-Path $logDir $name)
 }
 
@@ -57,7 +57,7 @@ if ($svc) {
   Write-Log "$ServiceName $($svc.Status)"
 }
 
-$apiRemoved = Remove-OldFiles $logDir @('api.out.log', 'api.err.log', 'ops-backup.log', 'ops-rotate.log')
+$apiRemoved = Remove-OldFiles $logDir @('api.out.log', 'api.err.log', 'ops-backup.log', 'ops-rotate.log', 'ops-watch.log', 'ops-watch-state.json')
 Write-Log "api logs removed=$apiRemoved dir=$logDir"
 
 $iisRoot = Join-Path $env:SystemDrive 'inetpub\logs\LogFiles'
