@@ -1,6 +1,7 @@
 // 算出用に読み込むマスタコンテキスト（プロトタイプ masters.ts の loadMasters 相当）。
 import type { PrismaService } from '../prisma/prisma.service';
 import { milestoneRowKey } from './milestone-mark.util';
+import { isShopJobMasterSource } from './milestone-usage.util';
 import type { DueSourceKind } from '../etl/etl-compute.util';
 import { DUE_SOURCE_KINDS, parseDefaultKishuDuePriority } from '../etl/etl-compute.util';
 
@@ -31,11 +32,12 @@ export interface MasterContext {
 }
 
 export async function loadMasters(prisma: PrismaService): Promise<MasterContext> {
-  const [param, ms, lt, cal, ven, cat, kishuDue] = await Promise.all([
+  const [param, ms, shopMaster, lt, cal, ven, cat, kishuDue] = await Promise.all([
     prisma.param.findMany({ select: { key: true, value: true } }),
     prisma.milestone.findMany({
       select: { shop: true, job: true, isMilestone: true, gaic: true },
     }),
+    prisma.shopMaster.findMany({ select: { shop: true, job: true, source: true } }),
     prisma.shopLt.findMany({ where: { active: true }, select: { shop: true, ltDays: true } }),
     prisma.calendar.findMany({ select: { calDate: true, isWorkday: true } }),
     prisma.vendor.findMany({ where: { active: true }, select: { orderPrefix: true, vendorName: true } }),
@@ -59,10 +61,14 @@ export async function loadMasters(prisma: PrismaService): Promise<MasterContext>
     bufGreen: numP('BUFFER_GREEN', 1),
     bufYellow: numP('BUFFER_YELLOW', 0),
   };
+  const shopJobKeys = new Set(
+    shopMaster.filter((s) => isShopJobMasterSource(s.source)).map((s) => milestoneRowKey(String(s.shop), String(s.job))),
+  );
   const milestoneMarks = new Set<string>();
   const gaicMarks = new Set<string>();
   for (const r of ms) {
     const key = milestoneRowKey(String(r.shop), String(r.job));
+    if (!shopJobKeys.has(key)) continue;
     if (r.isMilestone) milestoneMarks.add(key);
     if (r.gaic) gaicMarks.add(key);
   }

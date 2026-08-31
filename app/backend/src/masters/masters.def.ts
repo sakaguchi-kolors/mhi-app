@@ -27,7 +27,7 @@ export const MASTERS: MasterDef[] = [
     group: 'edit',
     pk: 'shop_job',
     autoId: false,
-    note: 'SHOP_JOBマスタを基本とし、FLEXSCHEにのみ存在する工程は取込時に自動補完されます。取込時に利用中でない工程は過去マスタへ自動退避されます。工程マイルストン(◎)・外注(外)をチェックで指定します。保存するとタイムラインに自動反映されます。',
+    note: 'SHOP_JOBマスタの工程のみが対象です。FLEXSCHEにのみ存在する工程は中間マイルストンには使いません。取込時に利用中でない工程は過去マスタへ自動退避されます。工程マイルストン(◎)・外注(外)をチェックで指定します。保存するとタイムラインに自動反映されます。',
     columns: [
       { key: 'shop', label: 'SHOP', type: 'text', readonly: true },
       { key: 'job', label: 'JOB', type: 'text', readonly: true },

@@ -1,6 +1,11 @@
-// 中間マイルストン: FLEXSCHE 工程データから利用中・最終利用日を集計
+// 中間マイルストン: 工程 routing から利用中・最終利用日を集計（MSマスタ対象は SHOP_JOB のみ）
 import type { PrismaClient } from '@prisma/client';
 import { milestoneRowKey } from './milestone-mark.util';
+
+/** 中間マイルストンマスタ（m_milestone）の対象は SHOP_JOB マスタ由来のみ。Flexi 補完 Shop は除外 */
+export function isShopJobMasterSource(source: string | null | undefined): boolean {
+  return (source ?? 'shop_job') === 'shop_job';
+}
 
 export interface MilestoneUsageStat {
   inUse: boolean;
@@ -50,7 +55,7 @@ type PrismaLike = Pick<PrismaClient, 'routing' | 'shopMaster' | 'milestone'>;
 export async function syncMilestoneArchive(prisma: PrismaLike, user: string): Promise<{ archived: number; restored: number }> {
   const [routes, shops, existing] = await Promise.all([
     prisma.routing.findMany({ select: { shop: true, job: true, planEnd: true, actualEnd: true } }),
-    prisma.shopMaster.findMany({ select: { shop: true, job: true } }),
+    prisma.shopMaster.findMany({ select: { shop: true, job: true, source: true } }),
     prisma.milestone.findMany(),
   ]);
   const stats = computeMilestoneUsageStats(routes);
@@ -60,6 +65,7 @@ export async function syncMilestoneArchive(prisma: PrismaLike, user: string): Pr
   let restored = 0;
 
   for (const sm of shops) {
+    if (!isShopJobMasterSource(sm.source)) continue;
     const key = milestoneRowKey(sm.shop, sm.job);
     const stat = stats.get(key) ?? { inUse: false, lastUsedAt: null };
     const ex = existingMap.get(key);
