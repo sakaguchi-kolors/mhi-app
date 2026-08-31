@@ -9,6 +9,8 @@ export type PartsFilterState = {
   owner: string;
   query: string;
   showShelved: boolean;
+  /** true のとき保留の有無で落とさない（要ウォッチ一覧） */
+  includeShelved?: boolean;
   stagnantThreshold: number;
   myKishus?: string[];
 };
@@ -33,9 +35,9 @@ export function matchPartsFilter(
   state: PartsFilterState,
   except: 'cat' | 'kishu' | 'owner' | 'chip' | null,
 ): boolean {
-  const { filter, cat, kishu, owner, query, showShelved, stagnantThreshold, myKishus } = state;
+  const { filter, cat, kishu, owner, query, showShelved, includeShelved, stagnantThreshold, myKishus } = state;
   if (!matchesPartsQuery(p, query)) return false;
-  if ((p.shelved ?? false) !== showShelved) return false;
+  if (!includeShelved && (p.shelved ?? false) !== showShelved) return false;
   if (except !== 'cat' && cat !== 'all' && p.category !== cat) return false;
   if (except !== 'kishu' && kishu !== 'all') {
     if (kishu === 'mine') {

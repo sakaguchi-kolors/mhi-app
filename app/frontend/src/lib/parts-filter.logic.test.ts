@@ -34,6 +34,12 @@ describe('parts-filter.logic', () => {
     expect(matchPartsFilter(basePart({ color: 'green' }), state, null)).toBe(false);
   });
 
+  it('includes shelved watched parts when includeShelved is set', () => {
+    const state = { filter: 'all' as const, cat: 'all', kishu: 'all', owner: 'all', query: '', showShelved: false, includeShelved: true, stagnantThreshold: 10 };
+    expect(matchPartsFilter(basePart({ shelved: true, watch: true }), state, null)).toBe(true);
+    expect(matchPartsFilter(basePart({ shelved: false, watch: true }), state, null)).toBe(true);
+  });
+
   it('excludes shelved unless toggled', () => {
     const state = { filter: 'all' as const, cat: 'all', kishu: 'all', owner: 'all', query: '', showShelved: false, stagnantThreshold: 10 };
     expect(matchPartsFilter(basePart({ shelved: true }), state, null)).toBe(false);

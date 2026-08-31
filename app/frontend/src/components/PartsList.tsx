@@ -85,6 +85,7 @@ export function PartsList({
     myKishus,
     isEngineer: !admin && !!meDisplayName,
     viewStorageKey,
+    includeShelved: watchOnly,
   });
   const [sorting, setSorting] = useState<SortingState>(() => loadPartsListView(viewStorageKey).sorting);
   const [pagination, setPagination] = useState<PaginationState>(() => {

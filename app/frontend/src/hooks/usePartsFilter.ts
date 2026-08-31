@@ -11,6 +11,7 @@ export type PartsFilterOptions = {
   myKishus?: string[];
   isEngineer?: boolean;
   viewStorageKey?: string;
+  includeShelved?: boolean;
 };
 
 export function usePartsFilter(
@@ -18,7 +19,7 @@ export function usePartsFilter(
   stagnantThreshold: number,
   options: PartsFilterOptions = {},
 ) {
-  const { defaultOwnerFilter, myKishus, isEngineer, viewStorageKey } = options;
+  const { defaultOwnerFilter, myKishus, isEngineer, viewStorageKey, includeShelved } = options;
   const stored = useMemo(() => loadPartsListView(viewStorageKey), [viewStorageKey]);
   const [filter, setFilter] = useState<ChipFilter>(stored.filter);
   const [cat, setCat] = useState(stored.cat);
@@ -34,8 +35,8 @@ export function usePartsFilter(
   const toggleFilter = (next: ChipFilter) => setFilter((cur) => (cur === next ? 'all' : next));
 
   const filterState = useMemo(
-    () => ({ filter, cat, kishu, owner, query, showShelved, stagnantThreshold, myKishus }),
-    [filter, cat, kishu, owner, query, showShelved, stagnantThreshold, myKishus],
+    () => ({ filter, cat, kishu, owner, query, showShelved, includeShelved, stagnantThreshold, myKishus }),
+    [filter, cat, kishu, owner, query, showShelved, includeShelved, stagnantThreshold, myKishus],
   );
 
   const match = useCallback(
