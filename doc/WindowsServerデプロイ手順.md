@@ -357,16 +357,22 @@ C:\apps\mhi-app\
     deploy\
       setup-server.ps1    初回セットアップ
       deploy.ps1          アップデート
+      backup-db.ps1       DBバックアップ（タスクから実行）
+      rotate-logs.ps1     ログ削除（60日超）
+      install-ops-tasks.ps1  タスク登録
       make-release.ps1    納品 ZIP 作成（開発 PC 用）
       web.config          IIS 設定
     sample-data\          サンプル CSV
   data\csv\               取込 CSV（検証用。本番は CSV_DIR で指定）
   logs\
-    api.out.log           API 標準出力
+    api.out.log           API 標準出力（NSSM が約24時間で切る）
     api.err.log           API エラー
 
+C:\apps\mhi-backup\       pg_dump（毎日 03:00、60日保持）
 C:\inetpub\mhi\           IIS 配信（frontend/dist + web.config）
 ```
+
+セットアップ／`deploy.ps1` がタスク `MhiApp-BackupDb`（毎日 03:00）と `MhiApp-RotateLogs`（毎日 00:15、60日超の API / IIS / PostgreSQL ログ削除）を登録する。
 
 ---
 
@@ -386,6 +392,7 @@ C:\inetpub\mhi\           IIS 配信（frontend/dist + web.config）
 | npm ない | PowerShell を**閉じて開き直す**（PATH 反映） |
 | Basic 認証エラー | `setup-server.ps1 -SkipBasicAuth` で再実行、または手動設定 |
 | `.env` が消えた | 更新前に必ず `C:\apps\backend.env.backup` へ退避 |
+| バックアップが無い | `Get-ScheduledTask MhiApp-BackupDb`。未登録なら `.\install-ops-tasks.ps1` |
 
 ### ログ確認
 

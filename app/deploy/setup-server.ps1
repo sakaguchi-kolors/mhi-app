@@ -237,6 +237,8 @@ if ($service) {
 & nssm set $ServiceName AppStdout 'C:\apps\mhi-app\logs\api.out.log'
 & nssm set $ServiceName AppStderr 'C:\apps\mhi-app\logs\api.err.log'
 & nssm set $ServiceName AppRotateFiles 1
+& nssm set $ServiceName AppRotateSeconds 86400
+& nssm set $ServiceName AppRotateOnline 1
 & nssm set $ServiceName AppExit Default Restart
 & nssm set $ServiceName Start SERVICE_AUTO_START
 

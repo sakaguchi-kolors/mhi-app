@@ -36,6 +36,12 @@ function Test-ServiceExists([string]$Name) {
   return [bool](Get-Service -Name $Name -ErrorAction SilentlyContinue)
 }
 
+function Test-IsAdmin {
+  $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+  $p = New-Object Security.Principal.WindowsPrincipal($id)
+  return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
 function Invoke-DeployStep([string]$Message, [scriptblock]$Action) {
   Write-Step $Message
   if ($DryRun) {
@@ -122,6 +128,16 @@ if ($FirstRun) {
     Invoke-Native { npm run etl }
     Pop-Location
   }
+}
+
+$appRoot = Split-Path $RepoRoot -Parent
+$opsScript = Join-Path $PSScriptRoot 'install-ops-tasks.ps1'
+if ((Test-Path $opsScript) -and (Test-IsAdmin)) {
+  Invoke-DeployStep 'Register DB backup / log-rotate tasks' {
+    & $opsScript -AppRoot $appRoot -ServiceName $ServiceName
+  }
+} elseif (-not (Test-IsAdmin)) {
+  Write-Host '  skip ops tasks (run deploy as Administrator to register backup / log-rotate)' -ForegroundColor Yellow
 }
 
 Invoke-DeployStep "Copy frontend to IIS: $SiteRoot" {
