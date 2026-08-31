@@ -1,6 +1,6 @@
 // スマホ部品詳細。工程を縦カードで積み、その下に判定根拠・困りごと・メモを置く。
 // 操作（確認済み／困りごと／メモ）は親指の届く下端に固定する。
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Part } from '../../types';
 import { gaicPhaseLabel, jc } from '../../util';
 import { hiddenLeadingDone } from '../../lib/mobile-steps.logic';
@@ -14,6 +14,8 @@ export function MobilePartDetail({
   onBack,
   onCheck,
   onTrouble,
+  onAskTrouble,
+  onAskNote,
   onMemo,
   onNote,
 }: {
@@ -23,21 +25,22 @@ export function MobilePartDetail({
   onBack: () => void;
   onCheck: (on: boolean) => void;
   onTrouble: (on: boolean) => void;
+  onAskTrouble: () => void;
+  onAskNote: () => void;
   onMemo: (memo: string) => void;
   onNote: (note: string) => void;
 }) {
   const [memo, setMemo] = useState(p.memo ?? '');
   const [note, setNote] = useState(p.note ?? '');
   const [showDone, setShowDone] = useState(false);
-  const noteRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setMemo(p.memo ?? '');
     setNote(p.note ?? '');
     setShowDone(false);
-    // 部品を切り替えたときだけ初期化（再取得で入力中のテキストを消さない）
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- p.id のみ意図的
-  }, [p.id]);
+    // シート保存後の p.memo / p.note も反映する
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 部品切替とサーバー反映のみ
+  }, [p.id, p.memo, p.note]);
 
   const hidden = showDone ? 0 : hiddenLeadingDone(p.timeline);
 
@@ -127,7 +130,14 @@ export function MobilePartDetail({
       <section className="m-sec">
         <h2 className="m-sec-t">困りごと</h2>
         <label className="m-switch">
-          <input type="checkbox" checked={!!p.trouble} onChange={(e) => onTrouble(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={!!p.trouble}
+            onChange={(e) => {
+              if (e.target.checked) onAskTrouble();
+              else onTrouble(false);
+            }}
+          />
           <span>{p.trouble ? '困りごとあり' : '困りごとなし'}</span>
         </label>
         <textarea
@@ -143,7 +153,6 @@ export function MobilePartDetail({
       <section className="m-sec">
         <h2 className="m-sec-t">メモ</h2>
         <textarea
-          ref={noteRef}
           className="m-area"
           value={note}
           onChange={(e) => setNote(e.target.value)}
@@ -157,17 +166,14 @@ export function MobilePartDetail({
         <button type="button" className={`m-abtn ok${checked ? ' on' : ''}`} onClick={() => onCheck(!checked)}>
           {checked ? '確認を取消' : '今日は確認した'}
         </button>
-        <button type="button" className={`m-abtn tr${p.trouble ? ' on' : ''}`} onClick={() => onTrouble(!p.trouble)}>
-          困りごと
-        </button>
         <button
           type="button"
-          className="m-abtn memo"
-          onClick={() => {
-            noteRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            noteRef.current?.focus();
-          }}
+          className={`m-abtn tr${p.trouble ? ' on' : ''}`}
+          onClick={() => (p.trouble ? onTrouble(false) : onAskTrouble())}
         >
+          困りごと
+        </button>
+        <button type="button" className="m-abtn memo" onClick={onAskNote}>
           メモ
         </button>
       </div>

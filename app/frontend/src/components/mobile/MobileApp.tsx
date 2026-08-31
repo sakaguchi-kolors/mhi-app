@@ -14,6 +14,9 @@ import { Toast, useToast } from '../Toast';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { MobileInbox } from './MobileInbox';
 import { MobilePartDetail } from './MobilePartDetail';
+import { MobileTroubleSheet } from './MobileTroubleSheet';
+import { MobileMemoSheet } from './MobileMemoSheet';
+import { composeTroubleMemo, findTroubleTemplate } from '../../lib/mobile-trouble-templates';
 import type { Part } from '../../types';
 
 /**
@@ -23,6 +26,9 @@ import type { Part } from '../../types';
 const UNDO_MS = 12000;
 
 type Undo = { label: string; run: () => void };
+type Sheet =
+  | { kind: 'trouble'; id: string }
+  | { kind: 'note'; id: string };
 
 function MobileDetailRoute({
   parts,
@@ -31,6 +37,8 @@ function MobileDetailRoute({
   checkedIds,
   onCheck,
   onTrouble,
+  onAskTrouble,
+  onAskNote,
   onMemo,
   onNote,
 }: {
@@ -40,6 +48,8 @@ function MobileDetailRoute({
   checkedIds: ReadonlySet<string>;
   onCheck: (id: string, on: boolean) => void;
   onTrouble: (id: string, on: boolean) => void;
+  onAskTrouble: (part: Part) => void;
+  onAskNote: (part: Part) => void;
   onMemo: (id: string, memo: string) => void;
   onNote: (id: string, note: string) => void;
 }) {
@@ -78,6 +88,8 @@ function MobileDetailRoute({
       onBack={back}
       onCheck={(on) => onCheck(id, on)}
       onTrouble={(on) => onTrouble(id, on)}
+      onAskTrouble={() => onAskTrouble(withTimeline)}
+      onAskNote={() => onAskNote(withTimeline)}
       onMemo={(memo) => onMemo(id, memo)}
       onNote={(note) => onNote(id, note)}
     />
@@ -89,10 +101,11 @@ export function MobileApp() {
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
-  const { parts, meta, isLoading, loadError } = useAppData(!!me);
-  const { onTrouble, onMemo, onNote } = usePartMutations(toast);
+  const { parts, meta, isLoading, loadError } = useAppData(!!me, me?.userId);
+  const { onTrouble, onMemo, onNote } = usePartMutations(toast, me?.userId);
   const checked = useCheckedToday();
   const [undo, setUndo] = useState<Undo | null>(null);
+  const [sheet, setSheet] = useState<Sheet | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
@@ -117,12 +130,48 @@ export function MobileApp() {
     [checked, offerUndo],
   );
 
-  const handleTrouble = useCallback(
-    (id: string, on: boolean) => {
-      onTrouble(id, on);
-      offerUndo(on ? '困りごとを立てました' : '困りごとを解除しました', () => onTrouble(id, !on));
+  const handleTroubleOff = useCallback(
+    (id: string) => {
+      onTrouble(id, false);
+      offerUndo('困りごとを解除しました', () => onTrouble(id, true));
     },
     [onTrouble, offerUndo],
+  );
+
+  const askTrouble = useCallback((part: Part) => {
+    setSheet({ kind: 'trouble', id: part.id });
+  }, []);
+
+  const confirmTrouble = useCallback(
+    (id: string, templateId: string, note: string) => {
+      const part = parts.find((p) => p.id === id);
+      const tmpl = findTroubleTemplate(templateId);
+      if (!part || !tmpl) return;
+      const prevMemo = part.memo;
+      const prevFlag = !!part.trouble;
+      onTrouble(id, true);
+      onMemo(id, composeTroubleMemo(prevMemo, tmpl.label, note));
+      setSheet(null);
+      offerUndo('困りごとを立てました', () => {
+        onTrouble(id, prevFlag);
+        onMemo(id, prevMemo ?? '');
+      });
+    },
+    [parts, onTrouble, onMemo, offerUndo],
+  );
+
+  const askNote = useCallback((part: Part) => {
+    setSheet({ kind: 'note', id: part.id });
+  }, []);
+
+  const saveNote = useCallback(
+    (id: string, text: string) => {
+      const prev = parts.find((p) => p.id === id)?.note ?? '';
+      onNote(id, text);
+      setSheet(null);
+      offerUndo('メモを保存しました', () => onNote(id, prev));
+    },
+    [parts, onNote, offerUndo],
   );
 
   const onLogout = async () => {
@@ -136,6 +185,7 @@ export function MobileApp() {
   const stagnantThreshold = meta?.stagnantThreshold ?? 10;
   // 詳細画面には下部の操作バーがあるので、「元に戻す」をその上へ逃がす
   const onDetail = location.pathname !== routes.mobile;
+  const sheetPart = sheet ? parts.find((p) => p.id === sheet.id) : undefined;
 
   return (
     <div className={`m-app${onDetail ? ' with-actionbar' : ''}`}>
@@ -175,7 +225,7 @@ export function MobileApp() {
                   checkedIds={checked.ids}
                   onOpen={(id) => { navigate(routes.mobilePart(id)); window.scrollTo(0, 0); }}
                   onCheck={handleCheck}
-                  onTrouble={handleTrouble}
+                  onAskTrouble={askTrouble}
                 />
               }
             />
@@ -188,7 +238,9 @@ export function MobileApp() {
                   isLoading={isLoading}
                   checkedIds={checked.ids}
                   onCheck={handleCheck}
-                  onTrouble={handleTrouble}
+                  onTrouble={(id, on) => { if (!on) handleTroubleOff(id); }}
+                  onAskTrouble={askTrouble}
+                  onAskNote={askNote}
                   onMemo={onMemo}
                   onNote={onNote}
                 />
@@ -213,6 +265,23 @@ export function MobileApp() {
             元に戻す
           </button>
         </div>
+      )}
+      {sheet?.kind === 'trouble' && sheetPart && (
+        <MobileTroubleSheet
+          partName={`${sheetPart.name}（${sheetPart.partNo}）`}
+          onClose={() => setSheet(null)}
+          onConfirm={(templateId, note) => confirmTrouble(sheetPart.id, templateId, note)}
+        />
+      )}
+      {sheet?.kind === 'note' && sheetPart && (
+        <MobileMemoSheet
+          title="メモ"
+          partName={`${sheetPart.name}（${sheetPart.partNo}）`}
+          initial={sheetPart.note ?? ''}
+          placeholder="例：本日中に後工程へ進捗確認。"
+          onClose={() => setSheet(null)}
+          onSave={(text) => saveNote(sheetPart.id, text)}
+        />
       )}
       <Toast state={toast} />
     </div>

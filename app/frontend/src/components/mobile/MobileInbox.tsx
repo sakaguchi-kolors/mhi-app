@@ -20,7 +20,7 @@ export function MobileInbox({
   checkedIds,
   onOpen,
   onCheck,
-  onTrouble,
+  onAskTrouble,
 }: {
   parts: Part[];
   owners: string[];
@@ -30,7 +30,8 @@ export function MobileInbox({
   checkedIds: ReadonlySet<string>;
   onOpen: (id: string) => void;
   onCheck: (id: string, on: boolean) => void;
-  onTrouble: (id: string, on: boolean) => void;
+  /** 困りごとシートを開く（左スワイプ／ボタン） */
+  onAskTrouble: (part: Part) => void;
 }) {
   const [tab, setTab] = useState<InboxTab>('all');
   const [query, setQuery] = useState('');
@@ -113,7 +114,7 @@ export function MobileInbox({
               checked={checkedIds.has(p.id)}
               onOpen={() => onOpen(p.id)}
               onCheck={(on) => onCheck(p.id, on)}
-              onTrouble={(on) => onTrouble(p.id, on)}
+              onTrouble={() => onAskTrouble(p)}
             />
           ))
         )}
