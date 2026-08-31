@@ -1,4 +1,5 @@
 import type { Part } from '../types';
+import { WATCH_LIST_VIEW_KEY } from '../lib/parts-list-view';
 import { PartsList } from './PartsList';
 
 interface Props {
@@ -25,6 +26,7 @@ export function WatchDashboard(props: Props) {
       {...props}
       watchOnly
       hideShelvedToggle
+      viewStorageKey={WATCH_LIST_VIEW_KEY}
     />
   );
 }

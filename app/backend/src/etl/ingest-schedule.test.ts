@@ -9,6 +9,8 @@ import {
   shouldTrigger,
   slotKey,
   tokyoClock,
+  tokyoDateTime,
+  toTokyoDateTime,
 } from './ingest-schedule';
 
 describe('normalizeTime', () => {
@@ -98,6 +100,16 @@ describe('addDaysYmd / tokyoClock / parseScheduleInput', () => {
   it('returns HH:MM in Asia/Tokyo', () => {
     const clock = tokyoClock(new Date('2026-08-31T00:00:00+09:00'));
     expect(clock).toEqual({ ymd: '2026-08-31', hm: '00:00' });
+  });
+
+  it('converts UTC ISO lastTriggeredAt to Tokyo wall clock', () => {
+    expect(toTokyoDateTime('2026-08-31T03:30:08.123Z')).toBe('2026-08-31T12:30:08');
+    expect(tokyoDateTime(new Date('2026-08-31T03:30:08Z'))).toBe('2026-08-31T12:30:08');
+  });
+
+  it('keeps an already-Tokyo wall clock string', () => {
+    expect(toTokyoDateTime('2026-08-31T12:30:08')).toBe('2026-08-31T12:30:08');
+    expect(toTokyoDateTime(null)).toBeNull();
   });
 
   it('parses a valid payload and keeps last-run fields unset', () => {

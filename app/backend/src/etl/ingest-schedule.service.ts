@@ -11,6 +11,7 @@ import {
   shouldTrigger,
   slotKey,
   tokyoClock,
+  toTokyoDateTime,
   type IngestScheduleStored,
 } from './ingest-schedule';
 import { IngestScheduleStore } from './ingest-schedule.store';
@@ -101,7 +102,7 @@ export class IngestScheduleService implements OnModuleInit, OnModuleDestroy {
     return {
       enabled: stored.enabled,
       times: stored.times,
-      lastTriggeredAt: stored.lastTriggeredAt,
+      lastTriggeredAt: toTokyoDateTime(stored.lastTriggeredAt),
       lastSlot: stored.lastSlot,
       nextRunAt: stored.enabled ? nextRunAt(stored.times, clock) : null,
       timezone: 'Asia/Tokyo',

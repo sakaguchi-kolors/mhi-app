@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { loadPartsListView, savePartsListView } from './parts-list-view';
+import { loadPartsListView, savePartsListView, WATCH_LIST_VIEW_KEY } from './parts-list-view';
 
 const mem = new Map<string, string>();
 const mock: Storage = {
@@ -35,6 +35,31 @@ describe('parts-list-view', () => {
     expect(loaded.pageIndex).toBe(2);
     expect(loaded.pageSize).toBe(100);
     expect(loaded.sorting).toEqual([{ id: 'due', desc: true }]);
+  });
+
+  it('keeps watch view page separate from parts list', () => {
+    savePartsListView({
+      filter: 'all',
+      query: '',
+      cat: 'all',
+      owner: 'all',
+      showShelved: false,
+      pageIndex: 4,
+      pageSize: 50,
+      sorting: [{ id: 'sev', desc: false }],
+    });
+    savePartsListView({
+      filter: 'all',
+      query: '',
+      cat: 'all',
+      owner: 'all',
+      showShelved: false,
+      pageIndex: 0,
+      pageSize: 30,
+      sorting: [{ id: 'sev', desc: false }],
+    }, WATCH_LIST_VIEW_KEY);
+    expect(loadPartsListView().pageIndex).toBe(4);
+    expect(loadPartsListView(WATCH_LIST_VIEW_KEY).pageIndex).toBe(0);
   });
 
   it('falls back on invalid page size', () => {

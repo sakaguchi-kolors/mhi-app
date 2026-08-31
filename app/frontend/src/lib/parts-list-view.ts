@@ -40,9 +40,12 @@ function storage(): Storage | null {
   }
 }
 
-export function loadPartsListView(): PartsListViewState {
+export const PARTS_LIST_VIEW_KEY = VIEW_KEY;
+export const WATCH_LIST_VIEW_KEY = 'mop_watch_list_view';
+
+export function loadPartsListView(key = VIEW_KEY): PartsListViewState {
   try {
-    const raw = storage()?.getItem(VIEW_KEY);
+    const raw = storage()?.getItem(key);
     if (!raw) return { ...defaults, sorting: [...defaults.sorting] };
     const p = JSON.parse(raw) as Partial<PartsListViewState>;
     const pageSize = PAGE_SIZES.includes(Number(p.pageSize) as (typeof PAGE_SIZES)[number]) ? Number(p.pageSize) : 30;
@@ -65,9 +68,9 @@ export function loadPartsListView(): PartsListViewState {
   }
 }
 
-export function savePartsListView(state: PartsListViewState): void {
+export function savePartsListView(state: PartsListViewState, key = VIEW_KEY): void {
   try {
-    storage()?.setItem(VIEW_KEY, JSON.stringify(state));
+    storage()?.setItem(key, JSON.stringify(state));
   } catch {
     /* ignore quota */
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchPartsFilter, computePartsKpi } from './parts-filter.logic';
+import { matchPartsFilter, computePartsKpi, resolveKishuFilter } from './parts-filter.logic';
 import type { Part } from '../types';
 
 const basePart = (over: Partial<Part> = {}): Part => ({
@@ -52,6 +52,15 @@ describe('parts-filter.logic', () => {
     const kpi = computePartsKpi(parts, { filter: 'all', cat: 'all', kishu: 'all', owner: 'all', query: 'nomatch', showShelved: false, stagnantThreshold: 10 });
     expect(kpi.r).toBe(1);
     expect(kpi.g).toBe(1);
+  });
+
+  it('resolveKishuFilter drops leftover mine for admin or empty kishus', () => {
+    expect(resolveKishuFilter('mine', false, [])).toBe('all');
+    expect(resolveKishuFilter('mine', true, [])).toBe('all');
+    expect(resolveKishuFilter('mine', true, ['K1'])).toBe('mine');
+    expect(resolveKishuFilter('K1', false, [])).toBe('K1');
+    expect(resolveKishuFilter(null, true, ['K1'])).toBe('mine');
+    expect(resolveKishuFilter(null, false, [])).toBe('all');
   });
 
   it('computePartsKpi counts unassigned on red', () => {

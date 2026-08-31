@@ -27,6 +27,7 @@ interface Props {
   defaultOwnerFilter?: string;
   watchOnly?: boolean;
   hideShelvedToggle?: boolean;
+  viewStorageKey?: string;
   onAutoAssign?: () => void;
   onOpen: (id: string) => void;
   onOwner: (id: string, owner: string) => void;
@@ -46,6 +47,7 @@ export function PartsList({
   defaultOwnerFilter,
   watchOnly,
   hideShelvedToggle,
+  viewStorageKey,
   onAutoAssign,
   onOpen,
   onOwner,
@@ -82,11 +84,12 @@ export function PartsList({
     defaultOwnerFilter,
     myKishus,
     isEngineer: !admin && !!meDisplayName,
+    viewStorageKey,
   });
-  const [sorting, setSorting] = useState<SortingState>(() => loadPartsListView().sorting);
+  const [sorting, setSorting] = useState<SortingState>(() => loadPartsListView(viewStorageKey).sorting);
   const [pagination, setPagination] = useState<PaginationState>(() => {
-    const v = loadPartsListView();
-    return { pageIndex: v.pageIndex, pageSize: v.pageSize };
+    const v = loadPartsListView(viewStorageKey);
+    return { pageIndex: watchOnly ? 0 : v.pageIndex, pageSize: v.pageSize };
   });
   const [memoFor, setMemoFor] = useState<Part | null>(null);
   const { busy: pageBusy, runTransition } = usePagedTableTransition();
@@ -114,8 +117,8 @@ export function PartsList({
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize,
       sorting,
-    });
-  }, [filter, query, cat, owner, defaultOwnerFilter, showShelved, pagination, sorting]);
+    }, viewStorageKey);
+  }, [filter, query, cat, owner, defaultOwnerFilter, showShelved, pagination, sorting, viewStorageKey]);
 
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const { timelines } = usePartTimelines(visibleIds);

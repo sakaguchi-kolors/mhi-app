@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Part } from '../types';
 import { facetOptions } from '../lib/facet';
-import { computePartsKpi, matchPartsFilter, type ChipFilter } from '../lib/parts-filter.logic';
+import { computePartsKpi, matchPartsFilter, resolveKishuFilter, type ChipFilter } from '../lib/parts-filter.logic';
 import { loadPartsListView } from '../lib/parts-list-view';
 
 export type { ChipFilter };
@@ -10,26 +10,20 @@ export type PartsFilterOptions = {
   defaultOwnerFilter?: string;
   myKishus?: string[];
   isEngineer?: boolean;
+  viewStorageKey?: string;
 };
-
-function initialKishuFilter(myKishus?: string[], isEngineer?: boolean): string {
-  const saved = localStorage.getItem('mop_kishu');
-  if (saved) return saved;
-  if (isEngineer && myKishus?.length) return 'mine';
-  return 'all';
-}
 
 export function usePartsFilter(
   parts: Part[],
   stagnantThreshold: number,
   options: PartsFilterOptions = {},
 ) {
-  const { defaultOwnerFilter, myKishus, isEngineer } = options;
-  const stored = useMemo(() => loadPartsListView(), []);
+  const { defaultOwnerFilter, myKishus, isEngineer, viewStorageKey } = options;
+  const stored = useMemo(() => loadPartsListView(viewStorageKey), [viewStorageKey]);
   const [filter, setFilter] = useState<ChipFilter>(stored.filter);
   const [cat, setCat] = useState(stored.cat);
-  const [owner, setOwner] = useState(defaultOwnerFilter ?? stored.owner);
-  const [kishu, setKishu] = useState(() => initialKishuFilter(myKishus, isEngineer));
+  const [owner, setOwner] = useState(defaultOwnerFilter ?? (isEngineer ? stored.owner : 'all'));
+  const [kishu, setKishu] = useState(() => resolveKishuFilter(localStorage.getItem('mop_kishu'), isEngineer, myKishus));
   const [showShelved, setShowShelved] = useState(stored.showShelved);
   const [query, setQuery] = useState(stored.query);
 

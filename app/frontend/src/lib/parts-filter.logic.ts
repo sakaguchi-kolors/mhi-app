@@ -13,6 +13,14 @@ export type PartsFilterState = {
   myKishus?: string[];
 };
 
+/** 管理者や担当機種が無いときは「自分の機種」を残さない */
+export function resolveKishuFilter(saved: string | null, isEngineer?: boolean, myKishus?: string[]): string {
+  if (saved === 'mine' && (!isEngineer || !myKishus?.length)) return 'all';
+  if (saved) return saved;
+  if (isEngineer && myKishus?.length) return 'mine';
+  return 'all';
+}
+
 function matchesPartsQuery(p: Part, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
