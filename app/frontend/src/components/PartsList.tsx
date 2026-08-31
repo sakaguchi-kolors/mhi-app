@@ -22,16 +22,42 @@ interface Props {
   owners: string[];
   stagnantThreshold?: number;
   admin?: boolean;
-  defaultOwnerFilter?: string; // 工程員は自分の担当のみ表示
+  meDisplayName?: string;
+  myKishus?: string[];
+  defaultOwnerFilter?: string;
+  watchOnly?: boolean;
+  hideShelvedToggle?: boolean;
   onAutoAssign?: () => void;
   onOpen: (id: string) => void;
   onOwner: (id: string, owner: string) => void;
   onTrouble: (id: string, flagged: boolean) => void;
   onShelved: (id: string, flagged: boolean) => void;
+  onWatch: (id: string, flagged: boolean) => void;
   onMemo: (id: string, memo: string) => void;
 }
 
-export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaultOwnerFilter, onAutoAssign, onOpen, onOwner, onTrouble, onShelved, onMemo }: Props) {
+export function PartsList({
+  parts,
+  owners,
+  stagnantThreshold = 10,
+  admin,
+  meDisplayName,
+  myKishus,
+  defaultOwnerFilter,
+  watchOnly,
+  hideShelvedToggle,
+  onAutoAssign,
+  onOpen,
+  onOwner,
+  onTrouble,
+  onShelved,
+  onWatch,
+  onMemo,
+}: Props) {
+  const listParts = useMemo(
+    () => (watchOnly ? parts.filter((p) => p.watch) : parts),
+    [parts, watchOnly],
+  );
   const {
     filter,
     query,
@@ -52,7 +78,11 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
     kishus,
     ownerOpts,
     kpi,
-  } = usePartsFilter(parts, stagnantThreshold, defaultOwnerFilter);
+  } = usePartsFilter(listParts, stagnantThreshold, {
+    defaultOwnerFilter,
+    myKishus,
+    isEngineer: !admin && !!meDisplayName,
+  });
   const [sorting, setSorting] = useState<SortingState>(() => loadPartsListView().sorting);
   const [pagination, setPagination] = useState<PaginationState>(() => {
     const v = loadPartsListView();
@@ -120,7 +150,7 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
             <div className="pno">{p.partNo} <span style={{ opacity: 0.7 }}>#{p.inst}</span></div>
             <span className="cat-tag">{p.category}</span>
             {p.urgent && <span className="flag urg">赤紙</span>}
-            {p.shortage && <span className="flag sho">子部品欠品</span>}
+            {p.watch && <span className="flag watch">要ウォッチ</span>}
             {p.shelved && <span className="flag shelved">保留</span>}
           </div>
         );
@@ -151,8 +181,22 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
     {
       id: 'owner', header: '担当者', enableSorting: false,
       cell: ({ row }) => {
-        const p = row.original; const cur = p.owner ?? '未割当';
-        // 現在値が候補外（例: 旧管理者割当）でも表示できるよう含める
+        const p = row.original;
+        const cur = p.owner ?? '未割当';
+        if (!admin && meDisplayName) {
+          if (cur !== '未割当' && cur !== meDisplayName) {
+            return <span className="own-sel static">{cur}</span>;
+          }
+          const opts = cur === '未割当' ? ['未割当', meDisplayName] : [meDisplayName];
+          return (
+            <div className="own-wrap">
+              <select className={`own-sel ${cur === '未割当' ? 'unassigned' : ''}`} value={cur}
+                onClick={(e) => e.stopPropagation()} onChange={(e) => onOwner(p.id, e.target.value)}>
+                {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+          );
+        }
         const opts = owners.includes(cur) ? owners : [...owners, cur];
         return (
           <div className="own-wrap">
@@ -200,6 +244,17 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
       },
     },
     {
+      id: 'watch', header: '要ウォッチ', enableSorting: false,
+      cell: ({ row }) => {
+        const p = row.original;
+        return (
+          <label className="trouble-lb" onClick={(e) => e.stopPropagation()} title="要ウォッチ部品">
+            <input type="checkbox" checked={!!p.watch} onChange={(e) => onWatch(p.id, e.target.checked)} />
+          </label>
+        );
+      },
+    },
+    {
       id: 'shelved', header: '保留', enableSorting: false,
       cell: ({ row }) => {
         const p = row.original;
@@ -211,7 +266,7 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
         );
       },
     },
-  ], [owners, onOwner, onTrouble, onShelved, stagnantThreshold, timelines]);
+  ], [owners, admin, meDisplayName, onOwner, onTrouble, onShelved, onWatch, stagnantThreshold, timelines]);
 
   const table = useReactTable({
     data: filtered, columns,
@@ -250,7 +305,9 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
         cats={cats}
         ownerOpts={ownerOpts}
         kishus={kishus}
+        myKishus={myKishus}
         admin={admin}
+        hideShelvedToggle={hideShelvedToggle ?? watchOnly}
         onSetFilter={setFilter}
         onSetQuery={setQuery}
         onSetCat={setCat}
@@ -283,7 +340,7 @@ export function PartsList({ parts, owners, stagnantThreshold = 10, admin, defaul
                 <tr key={row.id} className={`row-${row.original.color}`} onClick={() => onOpen(row.original.id)}>
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id}
-                      style={['stag', 'due', 'owner', 'ownerDays', 'trouble', 'troubleDays', 'shelved'].includes(cell.column.id) ? { textAlign: 'center' } : undefined}>
+                      style={['stag', 'due', 'owner', 'ownerDays', 'trouble', 'troubleDays', 'watch', 'shelved'].includes(cell.column.id) ? { textAlign: 'center' } : undefined}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}

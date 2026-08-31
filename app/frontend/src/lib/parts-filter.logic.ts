@@ -10,6 +10,7 @@ export type PartsFilterState = {
   query: string;
   showShelved: boolean;
   stagnantThreshold: number;
+  myKishus?: string[];
 };
 
 function matchesPartsQuery(p: Part, query: string): boolean {
@@ -24,11 +25,15 @@ export function matchPartsFilter(
   state: PartsFilterState,
   except: 'cat' | 'kishu' | 'owner' | 'chip' | null,
 ): boolean {
-  const { filter, cat, kishu, owner, query, showShelved, stagnantThreshold } = state;
+  const { filter, cat, kishu, owner, query, showShelved, stagnantThreshold, myKishus } = state;
   if (!matchesPartsQuery(p, query)) return false;
   if ((p.shelved ?? false) !== showShelved) return false;
   if (except !== 'cat' && cat !== 'all' && p.category !== cat) return false;
-  if (except !== 'kishu' && kishu !== 'all' && p.kishu !== kishu) return false;
+  if (except !== 'kishu' && kishu !== 'all') {
+    if (kishu === 'mine') {
+      if (!myKishus?.length || !myKishus.includes(p.kishu)) return false;
+    } else if (p.kishu !== kishu) return false;
+  }
   if (except !== 'owner' && owner !== 'all' && (p.owner ?? '未割当') !== owner) return false;
   if (except !== 'chip') {
     if (filter === 'risk' && p.color === 'green') return false;

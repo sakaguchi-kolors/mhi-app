@@ -1,5 +1,5 @@
 // ETL＋算出バッチ：CSV(CP932/UTF-8) → 取込 → 算出 → PostgreSQL
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfigService } from '../config/app-config.service';
 import { AsOfService } from '../config/as-of.service';
@@ -30,6 +30,7 @@ import {
 } from './etl-shop-master.util';
 import { BatchLockService } from './batch-lock.service';
 import { syncMilestoneArchive } from '../masters/milestone-usage.util';
+import { PartsService } from '../parts/parts.service';
 
 @Injectable()
 export class EtlService {
@@ -41,6 +42,7 @@ export class EtlService {
     private readonly asOf: AsOfService,
     private readonly audit: AuditService,
     private readonly batchLock: BatchLockService,
+    @Inject(forwardRef(() => PartsService)) private readonly parts: PartsService,
   ) {}
 
   /** CSV取込＋算出＋DB洗い替え（①②のみ。③アプリ固有は残す） */
@@ -113,7 +115,6 @@ export class EtlService {
     this.logger.log(`[etl] read flexsche ${Date.now() - t0Flex}ms`);
 
     const nameFromPbs = new Map<string, string>();
-    const shortageByOsId = new Map<string, boolean>();
     const dueMonthByOsId = new Map<string, string>();
     const t0Pbs = Date.now();
     const nPbs = await readCsvStream(csvDir, files.pbs, (r) => {
@@ -123,7 +124,6 @@ export class EtlService {
         const nm = clean(r['部品名称']);
         if (nm) nameFromPbs.set(osId, nm);
       }
-      if (clean(r['内作子部品ショーテージ'])) shortageByOsId.set(osId, true);
       if (!dueMonthByOsId.has(osId)) {
         const d = clean(r['計画納期']);
         if (d) dueMonthByOsId.set(osId, d);
@@ -180,7 +180,7 @@ export class EtlService {
         kishu: agg.kishu,
         finalDue,
         urgent: agg.urgent,
-        shortage: shortageByOsId.get(osId) ?? false,
+        shortage: false,
       };
     };
     const calcOpts = buildCalcOpts(M);
@@ -193,7 +193,7 @@ export class EtlService {
       const by = (c: string) => computed.filter((x) => x.part.color === c).length;
       this.logger.log(`[dry] 色分布  red=${by('red')} yellow=${by('yellow')} green=${by('green')}`);
       this.logger.log(`[dry] 滞留(>=${M.params.stagnantThreshold}日) = ${computed.filter((x) => x.part.stagnant >= M.params.stagnantThreshold).length}`);
-      this.logger.log(`[dry] 赤紙 = ${computed.filter((x) => x.part.urgent).length} / 子部品欠品 = ${computed.filter((x) => x.part.shortage).length}`);
+      this.logger.log(`[dry] 赤紙 = ${computed.filter((x) => x.part.urgent).length}`);
       this.logger.log(`[dry] 完成品分類 = ${[...new Set(computed.map((x) => x.part.category))].join(', ')}`);
       return { parts: computed.length, timeline: computed.reduce((s, x) => s + x.part.timeline.length, 0) };
     }
@@ -251,13 +251,14 @@ export class EtlService {
         await batchInsert(tx, 't_part', ['os_id', 'part_no', 'part_name', 'category', 'kishu', 'final_due', 'pbs_due', 'oct_due', 'urgent_flag', 'shortage_flag'], partRows);
         await batchInsert(tx, 't_routing', ['os_id', 'seq', 'seq_label', 'shop', 'job', 'plan_start', 'plan_end', 'actual_end', 'wip_flag', 'material_status', 'out_date', 'in_date', 'eta_date', 'req_due_date', 'order_no'], routingRows);
         await batchInsert(tx, 't_part_status', ['os_id', 'part_no', 'part_name', 'category', 'kishu', 'final_due', 'total_shops', 'done_shops', 'remain_shops', 'current_shop', 'days_left', 'buffer', 'color', 'stagnant_days', 'urgent', 'shortage', 'computed_at'], statusRows);
-        await batchInsert(tx, 't_timeline', ['os_id', 'seq', 'shop', 'name', 'status', 'plan_end', 'is_milestone', 'ms_passed', 'ms_color', 'ms_due', 'gaic', 'gaic_status', 'gaic_phase', 'order_no', 'out_date', 'in_date', 'eta_date', 'req_due_date'], timelineRows);
+        await batchInsert(tx, 't_timeline', ['os_id', 'seq', 'shop', 'name', 'status', 'plan_end', 'is_milestone', 'ms_passed', 'ms_color', 'ms_due', 'ms_behind', 'gaic', 'gaic_status', 'gaic_phase', 'order_no', 'out_date', 'in_date', 'eta_date', 'req_due_date'], timelineRows);
         await batchInsert(tx, 't_assignment', ['os_id'], assignRows, 'ON CONFLICT DO NOTHING');
         await batchInsert(tx, 'm_kishu', ['kishu'], kishuRows, 'ON CONFLICT DO NOTHING');
         await batchInsert(tx, 't_shop_name', ['shop', 'name'], shopNameRows);
         await tx.$executeRawUnsafe('DELETE FROM t_assignment WHERE os_id NOT IN (SELECT os_id FROM t_part)');
         await tx.$executeRawUnsafe('DELETE FROM t_trouble WHERE os_id NOT IN (SELECT os_id FROM t_part)');
         await tx.$executeRawUnsafe('DELETE FROM t_shelved WHERE os_id NOT IN (SELECT os_id FROM t_part)');
+        await tx.$executeRawUnsafe('DELETE FROM t_watch WHERE os_id NOT IN (SELECT os_id FROM t_part)');
         await tx.$executeRawUnsafe('DELETE FROM t_note WHERE os_id NOT IN (SELECT os_id FROM t_part)');
       },
       { timeout: 600000, maxWait: 60000 },
@@ -283,6 +284,7 @@ export class EtlService {
     this.logger.log(`完了: t_part_status=${statusRows.length}件 / t_timeline=${timelineRows.length}件`);
     await this.asOf.persist(asOfYmd, auditUser);
     this.logger.log(`AS_OF persisted = ${asOfYmd}`);
+    this.parts.clearCache();
     return { parts: statusRows.length, timeline: timelineRows.length };
   }
 
@@ -358,7 +360,7 @@ export class EtlService {
     const calcOpts = buildCalcOpts(M);
 
     const partRes = await this.prisma.part.findMany({
-      select: { osId: true, partNo: true, partName: true, kishu: true, pbsDue: true, octDue: true, urgentFlag: true, shortageFlag: true },
+      select: { osId: true, partNo: true, partName: true, kishu: true, pbsDue: true, octDue: true, urgentFlag: true },
     });
     const routeRes = await this.prisma.routing.findMany({ orderBy: [{ osId: 'asc' }, { seq: 'asc' }] });
     const rowsByOs = new Map<string, RoutingRow[]>();
@@ -406,7 +408,7 @@ export class EtlService {
         kishu: pr.kishu ?? '',
         finalDue,
         urgent: !!pr.urgentFlag,
-        shortage: !!pr.shortageFlag,
+        shortage: false,
       };
       return { osId, meta, part: computePart(meta, rows, resolveName, asOf, calcOpts) };
     });
@@ -421,12 +423,13 @@ export class EtlService {
         await tx.$executeRawUnsafe('TRUNCATE t_timeline');
         await tx.$executeRawUnsafe('TRUNCATE t_part_status');
         await batchInsert(tx, 't_part_status', ['os_id', 'part_no', 'part_name', 'category', 'kishu', 'final_due', 'total_shops', 'done_shops', 'remain_shops', 'current_shop', 'days_left', 'buffer', 'color', 'stagnant_days', 'urgent', 'shortage', 'computed_at'], statusRows);
-        await batchInsert(tx, 't_timeline', ['os_id', 'seq', 'shop', 'name', 'status', 'plan_end', 'is_milestone', 'ms_passed', 'ms_color', 'ms_due', 'gaic', 'gaic_status', 'gaic_phase', 'order_no', 'out_date', 'in_date', 'eta_date', 'req_due_date'], timelineRows);
+        await batchInsert(tx, 't_timeline', ['os_id', 'seq', 'shop', 'name', 'status', 'plan_end', 'is_milestone', 'ms_passed', 'ms_color', 'ms_due', 'ms_behind', 'gaic', 'gaic_status', 'gaic_phase', 'order_no', 'out_date', 'in_date', 'eta_date', 'req_due_date'], timelineRows);
       },
       { timeout: 600000, maxWait: 60000 },
     );
     this.logger.log(`[recompute] total ${Date.now() - t0}ms`);
     this.logger.log(`[recompute] 完了: t_part_status=${statusRows.length} / t_timeline=${timelineRows.length}`);
+    this.parts.clearCache();
     return { parts: statusRows.length, timeline: timelineRows.length, colors };
   }
 }

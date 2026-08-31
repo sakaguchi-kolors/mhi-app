@@ -6,13 +6,30 @@ import { loadPartsListView } from '../lib/parts-list-view';
 
 export type { ChipFilter };
 
-export function usePartsFilter(parts: Part[], stagnantThreshold: number, defaultOwnerFilter?: string) {
+export type PartsFilterOptions = {
+  defaultOwnerFilter?: string;
+  myKishus?: string[];
+  isEngineer?: boolean;
+};
+
+function initialKishuFilter(myKishus?: string[], isEngineer?: boolean): string {
+  const saved = localStorage.getItem('mop_kishu');
+  if (saved) return saved;
+  if (isEngineer && myKishus?.length) return 'mine';
+  return 'all';
+}
+
+export function usePartsFilter(
+  parts: Part[],
+  stagnantThreshold: number,
+  options: PartsFilterOptions = {},
+) {
+  const { defaultOwnerFilter, myKishus, isEngineer } = options;
   const stored = useMemo(() => loadPartsListView(), []);
   const [filter, setFilter] = useState<ChipFilter>(stored.filter);
   const [cat, setCat] = useState(stored.cat);
   const [owner, setOwner] = useState(defaultOwnerFilter ?? stored.owner);
-  // 機種フィルタのみ localStorage に永続化（よく使う絞り込みを再訪問時も維持するため）
-  const [kishu, setKishu] = useState(() => localStorage.getItem('mop_kishu') ?? 'all');
+  const [kishu, setKishu] = useState(() => initialKishuFilter(myKishus, isEngineer));
   const [showShelved, setShowShelved] = useState(stored.showShelved);
   const [query, setQuery] = useState(stored.query);
 
@@ -23,8 +40,8 @@ export function usePartsFilter(parts: Part[], stagnantThreshold: number, default
   const toggleFilter = (next: ChipFilter) => setFilter((cur) => (cur === next ? 'all' : next));
 
   const filterState = useMemo(
-    () => ({ filter, cat, kishu, owner, query, showShelved, stagnantThreshold }),
-    [filter, cat, kishu, owner, query, showShelved, stagnantThreshold],
+    () => ({ filter, cat, kishu, owner, query, showShelved, stagnantThreshold, myKishus }),
+    [filter, cat, kishu, owner, query, showShelved, stagnantThreshold, myKishus],
   );
 
   const match = useCallback(
@@ -67,5 +84,6 @@ export function usePartsFilter(parts: Part[], stagnantThreshold: number, default
     ownerOpts,
     kpi,
     match,
+    myKishus,
   };
 }

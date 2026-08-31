@@ -6,6 +6,8 @@ export interface PublicUser {
   displayName: string;
   role: string;
   active: boolean;
+  /** 担当機種（工程員の初期フィルタ用） */
+  kishus?: string[];
 }
 
 export type Color = 'red' | 'yellow' | 'green';
@@ -23,6 +25,8 @@ export interface TimelineCell {
   mpassed?: boolean;
   mcolor?: Color;
   mdue?: string;
+  /** 次MSまでの余裕日数（負=遅れ） */
+  msBehind?: number;
   gaic?: boolean;
   gorder?: string;
   gstat?: GaicStatus;
@@ -65,6 +69,7 @@ export interface Part {
   memo?: string;
   note?: string;
   shelved?: boolean;
+  watch?: boolean;
 }
 
 export interface ColDef {

@@ -4,6 +4,7 @@ import type { Part, Meta } from './types';
 import type { Me, RecomputeResult } from './api';
 import { PartsList } from './components/PartsList';
 import { TroublesDashboard } from './components/TroublesDashboard';
+import { WatchDashboard } from './components/WatchDashboard';
 import { PartDetailRouteModal } from './components/PartDetailModal';
 import { Masters } from './components/Masters';
 import { Ingest } from './components/Ingest';
@@ -16,6 +17,7 @@ import { PAGE_TITLES, routes, screenFromPath } from './routes';
 import { Loading } from './components/Loading';
 import { useAuth } from './context/AuthContext';
 import { useAppData, usePartMutations } from './hooks/useAppData';
+import { clearAppQueryCache, notifyAuthChange } from './lib/queryClient';
 
 function AdminRoute({ admin, children }: { admin: boolean; children: React.ReactNode }) {
   if (!admin) return <Navigate to={routes.parts} replace />;
@@ -32,6 +34,7 @@ function PartsSection({
   onOwner,
   onTrouble,
   onShelved,
+  onWatch,
   onMemo,
 }: {
   parts: Part[];
@@ -43,8 +46,10 @@ function PartsSection({
   onOwner: (id: string, owner: string) => void;
   onTrouble: (id: string, flagged: boolean) => void;
   onShelved: (id: string, flagged: boolean) => void;
+  onWatch: (id: string, flagged: boolean) => void;
   onMemo: (id: string, memo: string) => void;
 }) {
+  const myKishus = me.kishus ?? [];
   return (
     <>
       <PartsList
@@ -52,12 +57,61 @@ function PartsSection({
         owners={meta?.owners ?? []}
         stagnantThreshold={meta?.stagnantThreshold ?? 10}
         admin={admin}
+        meDisplayName={me.displayName}
+        myKishus={myKishus}
         defaultOwnerFilter={admin ? undefined : me.displayName}
         onAutoAssign={onAutoAssign}
         onOpen={onOpen}
         onOwner={onOwner}
         onTrouble={onTrouble}
         onShelved={onShelved}
+        onWatch={onWatch}
+        onMemo={onMemo}
+      />
+      <Outlet />
+    </>
+  );
+}
+
+function WatchSection({
+  parts,
+  meta,
+  admin,
+  me,
+  onOpen,
+  onOwner,
+  onTrouble,
+  onShelved,
+  onWatch,
+  onMemo,
+}: {
+  parts: Part[];
+  meta: Meta | null;
+  admin: boolean;
+  me: Me;
+  onOpen: (id: string) => void;
+  onOwner: (id: string, owner: string) => void;
+  onTrouble: (id: string, flagged: boolean) => void;
+  onShelved: (id: string, flagged: boolean) => void;
+  onWatch: (id: string, flagged: boolean) => void;
+  onMemo: (id: string, memo: string) => void;
+}) {
+  const myKishus = me.kishus ?? [];
+  return (
+    <>
+      <WatchDashboard
+        parts={parts}
+        owners={meta?.owners ?? []}
+        stagnantThreshold={meta?.stagnantThreshold ?? 10}
+        admin={admin}
+        meDisplayName={me.displayName}
+        myKishus={myKishus}
+        defaultOwnerFilter={admin ? undefined : me.displayName}
+        onOpen={onOpen}
+        onOwner={onOwner}
+        onTrouble={onTrouble}
+        onShelved={onShelved}
+        onWatch={onWatch}
         onMemo={onMemo}
       />
       <Outlet />
@@ -77,6 +131,7 @@ function AppLayout({
   onOwner,
   onTrouble,
   onShelved,
+  onWatch,
   onMemo,
   onNote,
   onRecompute,
@@ -94,6 +149,7 @@ function AppLayout({
   onOwner: (id: string, owner: string) => void;
   onTrouble: (id: string, flagged: boolean) => void;
   onShelved: (id: string, flagged: boolean) => void;
+  onWatch: (id: string, flagged: boolean) => void;
   onMemo: (id: string, memo: string) => void;
   onNote: (id: string, note: string) => void;
   onRecompute: (opts?: { background?: boolean }) => Promise<RecomputeResult>;
@@ -105,33 +161,38 @@ function AppLayout({
   const screen = screenFromPath(location.pathname);
   const asof = meta?.asOf ? meta.asOf.replace(/-/g, '/') : '';
   const detailId = useMemo(() => {
-    if (!location.pathname.startsWith(`${routes.parts}/`)) return null;
-    const raw = location.pathname.slice(`${routes.parts}/`.length);
-    if (!raw) return null;
-    try {
-      return decodeURIComponent(raw);
-    } catch {
-      return null;
+    for (const base of [routes.parts, routes.watch] as const) {
+      if (!location.pathname.startsWith(`${base}/`)) continue;
+      const raw = location.pathname.slice(`${base}/`.length);
+      if (!raw) return null;
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return null;
+      }
     }
+    return null;
   }, [location.pathname]);
   const detailPart = detailId ? parts.find((p) => p.id === detailId) : null;
   const troubleCount = useMemo(() => parts.filter((p) => p.trouble).length, [parts]);
-  const needsPartsData = screen === 'parts' || screen === 'detail' || screen === 'troubles';
+  const watchCount = useMemo(() => parts.filter((p) => p.watch).length, [parts]);
+  const needsPartsData = screen === 'parts' || screen === 'detail' || screen === 'troubles' || screen === 'watch';
   const showPartsVeil = needsPartsData && isLoading;
 
   const openDetail = (id: string) => {
-    navigate(routes.part(id));
+    const base = screen === 'watch' ? routes.watch : routes.parts;
+    navigate(`${base}/${encodeURIComponent(id)}`);
   };
 
   return (
     <div className="app">
       <div className="app-shell">
-        <Sidebar admin={admin} me={me} asof={asof} troubleCount={troubleCount} onLogout={onLogout} />
+        <Sidebar admin={admin} me={me} asof={asof} troubleCount={troubleCount} watchCount={watchCount} onLogout={onLogout} />
         <div className="app-body">
           <header className="topbar">
             <h1 className="page-title">
               {PAGE_TITLES[screen]}
-              {screen === 'detail' && detailPart && <span>{detailPart.partNo}</span>}
+              {detailId && detailPart && <span>{detailPart.partNo}</span>}
             </h1>
             {asof && <div className="asof">データ基準日 <b>{asof}</b></div>}
           </header>
@@ -161,6 +222,7 @@ function AppLayout({
                         onOwner={onOwner}
                         onTrouble={onTrouble}
                         onShelved={onShelved}
+                        onWatch={onWatch}
                         onMemo={onMemo}
                       />
                     }
@@ -173,6 +235,37 @@ function AppLayout({
                           stagnantThreshold={meta?.stagnantThreshold ?? 10}
                           onNote={onNote}
                           isLoading={isLoading}
+                          listPath={routes.parts}
+                        />
+                      }
+                    />
+                  </Route>
+                  <Route
+                    path={routes.watch}
+                    element={
+                      <WatchSection
+                        parts={parts}
+                        meta={meta}
+                        admin={admin}
+                        me={me}
+                        onOpen={openDetail}
+                        onOwner={onOwner}
+                        onTrouble={onTrouble}
+                        onShelved={onShelved}
+                        onWatch={onWatch}
+                        onMemo={onMemo}
+                      />
+                    }
+                  >
+                    <Route
+                      path=":id"
+                      element={
+                        <PartDetailRouteModal
+                          parts={parts}
+                          stagnantThreshold={meta?.stagnantThreshold ?? 10}
+                          onNote={onNote}
+                          isLoading={isLoading}
+                          listPath={routes.watch}
                         />
                       }
                     />
@@ -213,8 +306,8 @@ function AuthenticatedApp() {
   const { me, admin, logout } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
-  const { parts, meta, isLoading, loadError, reload } = useAppData(!!me);
-  const { onOwner, onTrouble, onShelved, onMemo, onNote, runRecompute, autoAssign } = usePartMutations(toast);
+  const { parts, meta, isLoading, loadError, reload } = useAppData(!!me, me?.userId);
+  const { onOwner, onTrouble, onShelved, onWatch, onMemo, onNote, runRecompute, autoAssign } = usePartMutations(toast, me?.userId);
 
   const onLogout = async () => {
     await logout();
@@ -256,6 +349,7 @@ function AuthenticatedApp() {
       onOwner={onOwner}
       onTrouble={onTrouble}
       onShelved={onShelved}
+      onWatch={onWatch}
       onMemo={onMemo}
       onNote={onNote}
       onRecompute={onRecompute}
@@ -271,6 +365,8 @@ export function App() {
   const location = useLocation();
 
   const handleAuthed = (u: Me) => {
+    clearAppQueryCache();
+    notifyAuthChange();
     setMe(u);
     setNeedsSetup(false);
     navigate(routes.parts, { replace: true });

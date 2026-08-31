@@ -42,6 +42,7 @@ export class BatchController {
   @Post('assign/auto')
   async assignAuto(@Req() req: Request, @Body() _body: unknown): Promise<{ ok: true } & Record<string, unknown>> {
     const summary = await this.assign.autoAssign();
+    this.parts.clearCache();
     await this.audit.record(appUser(req), 'assign.auto', 'batch', '-', null, summary);
     return { ok: true, ...summary };
   }

@@ -103,11 +103,13 @@ export function PartDetailRouteModal({
   stagnantThreshold,
   onNote,
   isLoading,
+  listPath = routes.parts,
 }: {
   parts: Part[];
   stagnantThreshold: number;
   onNote: (id: string, note: string) => void;
   isLoading: boolean;
+  listPath?: string;
 }) {
   const { id: rawId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -117,7 +119,7 @@ export function PartDetailRouteModal({
   } catch {
     id = undefined;
   }
-  const close = () => navigate(routes.parts);
+  const close = () => navigate(listPath);
   const part = id ? parts.find((p) => p.id === id) : undefined;
   const { timelines, loading: tlLoading } = usePartTimelines(id ? [id] : []);
   const partWithTimeline = part ? mergePartTimeline(part, timelines) : undefined;

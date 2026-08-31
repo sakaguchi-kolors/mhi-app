@@ -1,8 +1,9 @@
 // 部品一覧の組み立て（②算出結果 ＋ ③アプリ固有 ＋ 外注先名）と、アプリ固有データの更新。
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AsOfService } from '../config/as-of.service';
 import { AuditService } from '../audit/audit.service';
+import type { JwtUser } from '../auth/jwt-auth.guard';
 import type { Part, TimelineCell, Color, CellStatus, GaicStatus, GaicPhase } from '../common/types';
 import { mmdd, ymd, daysSince } from '../shared/dates';
 
@@ -18,6 +19,7 @@ type TimelineRow = {
   msPassed: boolean | null;
   msColor: string | null;
   msDue: Date | null;
+  msBehind: number | null;
   gaic: boolean;
   gaicStatus: string | null;
   gaicPhase: string | null;
@@ -46,6 +48,10 @@ export class PartsService {
 
   clearCache(): void {
     this.partsCache = null;
+  }
+
+  private afterMutation(): void {
+    this.clearCache();
   }
 
   /** 一覧向け（タイムラインなし・軽量） */
@@ -99,25 +105,28 @@ export class PartsService {
 
   private async assembleSummaries(computedAt: Date | null): Promise<Part[]> {
     const asOf = await this.asOf.getEffectiveDate();
-    const [status, assign, trouble, shelved, note] = await Promise.all([
+    const [status, assign, trouble, shelved, watch, note] = await Promise.all([
       this.prisma.partStatus.findMany(),
       this.prisma.assignment.findMany({
         select: { osId: true, userId: true, assignedAt: true, user: { select: { displayName: true } } },
       }),
       this.prisma.trouble.findMany({ select: { osId: true, flagged: true, flaggedAt: true, memo: true } }),
       this.prisma.shelved.findMany({ select: { osId: true, flagged: true } }),
+      this.prisma.watch.findMany({ select: { osId: true, flagged: true } }),
       this.prisma.note.findMany({ select: { osId: true, body: true } }),
     ]);
 
     const aMap = new Map(assign.map((r) => [r.osId, r]));
     const tMap = new Map(trouble.map((r) => [r.osId, r]));
     const sMap = new Map(shelved.map((r) => [r.osId, r]));
+    const wMap = new Map(watch.map((r) => [r.osId, r]));
     const nMap = new Map(note.map((r) => [r.osId, r]));
 
     return status.map((s): Part => {
       const a = aMap.get(s.osId);
       const t = tMap.get(s.osId);
       const sh = sMap.get(s.osId);
+      const w = wMap.get(s.osId);
       const owner = a?.user?.displayName ?? '未割当';
       return {
         id: s.osId,
@@ -134,7 +143,7 @@ export class PartsService {
         color: (s.color ?? 'green') as Color,
         stagnant: s.stagnantDays ?? 0,
         urgent: s.urgent ?? false,
-        shortage: s.shortage ?? false,
+        shortage: false,
         currentShop: s.currentShop ?? '',
         timeline: [],
         inst: String(s.osId).replace(/\D/g, '').slice(-4),
@@ -145,6 +154,7 @@ export class PartsService {
         memo: t?.memo ?? '',
         note: nMap.get(s.osId)?.body ?? '',
         shelved: sh?.flagged ?? false,
+        watch: w?.flagged ?? false,
       };
     });
   }
@@ -168,7 +178,8 @@ export class PartsService {
   }
 
   async setOwner(
-    user: string,
+    actor: JwtUser,
+    auditUser: string,
     osId: string,
     input: { owner?: string; userId?: number },
   ): Promise<void> {
@@ -196,6 +207,8 @@ export class PartsService {
       }
     }
 
+    await this.assertOwnerPermission(actor, osId, userId);
+
     const assignedAt = userId ? new Date() : null;
     await this.prisma.assignment.upsert({
       where: { osId },
@@ -203,7 +216,30 @@ export class PartsService {
       create: { osId, userId, assignedAt },
     });
     const after = await this.snapshotPartApp(osId);
-    await this.audit.record(user, 'part.owner', 't_assignment', osId, before, after);
+    await this.audit.record(auditUser, 'part.owner', 't_assignment', osId, before, after);
+    this.afterMutation();
+  }
+
+  private async assertOwnerPermission(actor: JwtUser, osId: string, targetUserId: number | null): Promise<void> {
+    if (actor.role === '管理者') return;
+
+    const cur = await this.prisma.assignment.findUnique({
+      where: { osId },
+      include: { user: { select: { userId: true, displayName: true } } },
+    });
+    const currentOwner = cur?.user?.displayName ?? '未割当';
+    const currentUserId = cur?.userId ?? null;
+    const targetIsUnassigned = targetUserId == null;
+
+    if (currentOwner !== '未割当' && currentUserId !== actor.sub) {
+      throw new ForbiddenException('他人の担当は変更できません');
+    }
+    if (currentUserId === actor.sub && targetIsUnassigned) {
+      throw new ForbiddenException('自分の担当を未割当にはできません');
+    }
+    if (currentOwner === '未割当' && !targetIsUnassigned && targetUserId !== actor.sub) {
+      throw new ForbiddenException('未割当の部品は自分にのみ割り当てできます');
+    }
   }
 
   async setTrouble(user: string, osId: string, flagged: boolean): Promise<void> {
@@ -217,6 +253,7 @@ export class PartsService {
     });
     const after = await this.snapshotPartApp(osId);
     await this.audit.record(user, 'part.trouble', 't_trouble', osId, before, after);
+    this.afterMutation();
   }
 
   async setShelved(user: string, osId: string, flagged: boolean): Promise<void> {
@@ -230,6 +267,21 @@ export class PartsService {
     });
     const after = await this.snapshotPartApp(osId);
     await this.audit.record(user, 'part.shelved', 't_shelved', osId, before, after);
+    this.afterMutation();
+  }
+
+  async setWatch(user: string, osId: string, flagged: boolean): Promise<void> {
+    await this.assertPartExists(osId);
+    const before = await this.snapshotPartApp(osId);
+    const flaggedAt = flagged ? new Date() : null;
+    await this.prisma.watch.upsert({
+      where: { osId },
+      update: { flagged, flaggedAt },
+      create: { osId, flagged, flaggedAt },
+    });
+    const after = await this.snapshotPartApp(osId);
+    await this.audit.record(user, 'part.watch', 't_watch', osId, before, after);
+    this.afterMutation();
   }
 
   async setMemo(user: string, osId: string, memo: string): Promise<void> {
@@ -243,6 +295,7 @@ export class PartsService {
     });
     const after = await this.snapshotPartApp(osId);
     await this.audit.record(user, 'part.memo', 't_trouble', osId, before, after);
+    this.afterMutation();
   }
 
   async setNote(user: string, osId: string, body: string): Promise<void> {
@@ -256,6 +309,7 @@ export class PartsService {
     });
     const after = await this.snapshotPartApp(osId);
     await this.audit.record(user, 'part.note', 't_note', osId, before, after);
+    this.afterMutation();
   }
 
   private async assertPartExists(osId: string): Promise<void> {
@@ -265,18 +319,20 @@ export class PartsService {
 
   /** 監査用：③アプリ固有データのスナップショット */
   private async snapshotPartApp(osId: string): Promise<Record<string, unknown> | null> {
-    const [a, t, s, n] = await Promise.all([
+    const [a, t, s, w, n] = await Promise.all([
       this.prisma.assignment.findUnique({ where: { osId }, include: { user: { select: { displayName: true } } } }),
       this.prisma.trouble.findUnique({ where: { osId } }),
       this.prisma.shelved.findUnique({ where: { osId } }),
+      this.prisma.watch.findUnique({ where: { osId } }),
       this.prisma.note.findUnique({ where: { osId } }),
     ]);
-    if (!a && !t && !s && !n) return null;
+    if (!a && !t && !s && !w && !n) return null;
     return {
       owner: a?.user?.displayName ?? '未割当',
       trouble: t?.flagged ?? false,
       memo: t?.memo ?? '',
       shelved: s?.flagged ?? false,
+      watch: w?.flagged ?? false,
       note: n?.body ?? '',
     };
   }
@@ -305,6 +361,7 @@ function toTimelineCell(r: TimelineRow, vendorOf: (order?: string | null) => str
     if (!cell.mpassed) {
       cell.mcolor = (r.msColor ?? undefined) as Color | undefined;
       cell.mdue = mmdd(r.msDue);
+      if (r.msBehind != null) cell.msBehind = r.msBehind;
     }
   }
   if (r.gaic) {

@@ -127,8 +127,8 @@ export const DEFAULT_PARAMS: { key: string; value: string; description: string }
   { key: 'BUFFER_GREEN', value: '1', description: 'バッファがこの値以上で緑' },
   { key: 'BUFFER_YELLOW', value: '0', description: 'バッファがこの値以上（緑未満）で黄。未満は赤' },
   { key: 'KISHU_DUE_PRIORITY_1', value: 'pbs', description: '機種別納期優先順位（標準・第1優先）' },
-  { key: 'KISHU_DUE_PRIORITY_2', value: 'flexsche', description: '機種別納期優先順位（標準・第2優先）' },
-  { key: 'KISHU_DUE_PRIORITY_3', value: 'octopus', description: '機種別納期優先順位（標準・第3優先）' },
+  { key: 'KISHU_DUE_PRIORITY_2', value: 'octopus', description: '機種別納期優先順位（標準・第2優先）' },
+  { key: 'KISHU_DUE_PRIORITY_3', value: 'flexsche', description: '機種別納期優先順位（標準・第3優先）' },
 ];
 
 export const DEFAULT_MILESTONES: { match_type: string; pattern: string; label: string }[] = [

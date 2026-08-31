@@ -27,17 +27,22 @@ export function Ingest({ toast, onIngested }: { toast: ToastState; onIngested: (
   const [uploadProgress, setUploadProgress] = useState<{ key: string; label: string; pct: number } | null>(null);
   const [draft, setDraft] = useState<UploadDraft>(emptyDraft);
   const [now, setNow] = useState(() => Date.now());
-  const prevState = useRef<string | null>(null);
+  const loadSeq = useRef(0);
+  const trackedJob = useRef<{ id: string; state: string } | null>(null);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
-      setInfo(await api.getIngest());
+      const data = await api.getIngest();
+      if (seq !== loadSeq.current) return;
+      setInfo(data);
     } catch (e) {
+      if (seq !== loadSeq.current) return;
       console.error(e);
       toast.show('取込情報の取得に失敗しました');
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [toast]);
 
@@ -52,19 +57,24 @@ export function Ingest({ toast, onIngested }: { toast: ToastState; onIngested: (
     return () => clearInterval(t);
   }, [running, load]);
 
-  // running -> done/error への遷移でトースト＆一覧リロード
+  // 同一ジョブが running -> done/error になったときだけトースト（古い lastJob の error で誤爆しない）
   useEffect(() => {
-    const st = info?.job?.state ?? null;
-    if (prevState.current === 'running' && st !== 'running') {
-      if (st === 'done') {
-        const r = info?.job?.result;
+    const job = info?.job;
+    if (!job) {
+      trackedJob.current = null;
+      return;
+    }
+    const prev = trackedJob.current;
+    if (prev?.id === job.id && prev.state === 'running' && job.state !== 'running') {
+      if (job.state === 'done') {
+        const r = job.result;
         toast.show(r ? `取込完了：${r.parts}部品を更新` : '取込完了');
         onIngested().catch(() => {});
-      } else if (st === 'error') {
+      } else if (job.state === 'error') {
         toast.show('取込に失敗しました');
       }
     }
-    prevState.current = st;
+    trackedJob.current = { id: job.id, state: job.state };
   }, [info, toast, onIngested]);
 
   const start = async () => {
@@ -74,7 +84,10 @@ export function Ingest({ toast, onIngested }: { toast: ToastState; onIngested: (
       const r = await api.runIngest();
       if (r.status === 409) toast.show('別の取込が実行中です');
       else if (r.status === 422) toast.show('取込前チェックでエラーがあります（下表を確認）');
-      else if (r.started) { toast.show('取込を開始しました'); prevState.current = 'running'; }
+      else if (r.started) {
+        toast.show('取込を開始しました');
+        if (r.job) trackedJob.current = { id: r.job.id, state: 'running' };
+      }
       await load();
     } catch (e) {
       console.error(e);

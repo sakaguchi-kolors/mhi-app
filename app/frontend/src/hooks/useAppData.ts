@@ -4,22 +4,19 @@ import type { Part } from '../types';
 import * as api from '../api';
 import type { RecomputeResult } from '../api';
 import { timelineCacheKey } from './usePartTimelines';
+import { metaQueryKey, partsSummaryQueryKey } from '../lib/queryClient';
 
-export const queryKeys = {
-  meta: ['meta'] as const,
-  partsSummary: ['parts', 'summary'] as const,
-};
-
-export function useMeta(enabled: boolean) {
+export function useMeta(enabled: boolean, userId?: number) {
   return useQuery({
-    queryKey: queryKeys.meta,
+    queryKey: metaQueryKey(userId),
     queryFn: api.getMeta,
     enabled,
   });
 }
 
-export function usePartMutations(toast: { show: (msg: string) => void }) {
+export function usePartMutations(toast: { show: (msg: string) => void }, userId?: number) {
   const qc = useQueryClient();
+  const summaryKey = partsSummaryQueryKey(userId);
 
   const invalidate = useCallback(() => {
     qc.removeQueries({ queryKey: timelineCacheKey });
@@ -28,11 +25,11 @@ export function usePartMutations(toast: { show: (msg: string) => void }) {
 
   const patchPart = useCallback(
     (id: string, patch: Partial<Part>) => {
-      qc.setQueryData<Part[]>(queryKeys.partsSummary, (prev) =>
+      qc.setQueryData<Part[]>(summaryKey, (prev) =>
         prev?.map((p) => (p.id === id ? { ...p, ...patch } : p)),
       );
     },
-    [qc],
+    [qc, summaryKey],
   );
 
   const mutate = useMutation({
@@ -70,6 +67,15 @@ export function usePartMutations(toast: { show: (msg: string) => void }) {
       mutate.mutate({
         fn: () => api.setShelved(id, flagged),
         okPatch: () => patchPart(id, { shelved: flagged }),
+      }),
+    [mutate, patchPart],
+  );
+
+  const onWatch = useCallback(
+    (id: string, flagged: boolean) =>
+      mutate.mutate({
+        fn: () => api.setWatch(id, flagged),
+        okPatch: () => patchPart(id, { watch: flagged }),
       }),
     [mutate, patchPart],
   );
@@ -119,6 +125,7 @@ export function usePartMutations(toast: { show: (msg: string) => void }) {
     onOwner,
     onTrouble,
     onShelved,
+    onWatch,
     onMemo,
     onNote,
     recompute: recomputeMutation,
@@ -140,10 +147,11 @@ export type AppData = {
   reload: () => Promise<void>;
 };
 
-export function useAppData(enabled: boolean): AppData {
-  const metaQ = useMeta(enabled);
+export function useAppData(enabled: boolean, userId?: number): AppData {
+  const metaQ = useMeta(enabled, userId);
+  const summaryKey = partsSummaryQueryKey(userId);
   const summaryQ = useQuery({
-    queryKey: queryKeys.partsSummary,
+    queryKey: summaryKey,
     queryFn: api.getParts,
     enabled,
   });
@@ -161,7 +169,7 @@ export function useAppData(enabled: boolean): AppData {
   const reload = async () => {
     qc.removeQueries({ queryKey: timelineCacheKey });
     await Promise.all([
-      qc.invalidateQueries({ queryKey: queryKeys.meta }),
+      qc.invalidateQueries({ queryKey: metaQueryKey(userId) }),
       qc.invalidateQueries({ queryKey: ['parts'] }),
     ]);
   };

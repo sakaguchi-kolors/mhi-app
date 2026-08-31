@@ -8,6 +8,7 @@ export interface Me {
   email: string;
   displayName: string;
   role: string;
+  kishus?: string[];
 }
 export interface AppUser extends Me {
   active: boolean;
@@ -71,6 +72,7 @@ export const getPartTimelines = (ids: string[]) => {
 export const setOwner = (id: string, owner: string) => post(`/api/parts/${encodeURIComponent(id)}/owner`, { owner });
 export const setTrouble = (id: string, flagged: boolean) => post(`/api/parts/${encodeURIComponent(id)}/trouble`, { flagged });
 export const setShelved = (id: string, flagged: boolean) => post(`/api/parts/${encodeURIComponent(id)}/shelved`, { flagged });
+export const setWatch = (id: string, flagged: boolean) => post(`/api/parts/${encodeURIComponent(id)}/watch`, { flagged });
 export const setMemo = (id: string, memo: string) => post(`/api/parts/${encodeURIComponent(id)}/memo`, { memo });
 export const setNote = (id: string, note: string) => post(`/api/parts/${encodeURIComponent(id)}/note`, { note });
 

@@ -154,8 +154,9 @@
   .flag{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;margin:2px 3px 0 0;white-space:nowrap;}
   .flag.stag{background:var(--red-bg);color:var(--red);}
   .flag.urg{background:#3a1d5b;color:#fff;}
-  .flag.sho{background:#7a3b00;color:#fff;}
+  .flag.watch{background:#1a4d6e;color:#fff;}
   .flag.shelved{background:#5a6270;color:#fff;}
+  .own-sel.static{display:inline-block;font-size:12px;padding:7px 8px;min-width:104px;text-align:center;}
   .due{font-weight:700;} .due-late{color:var(--red);} .due-ok{color:var(--text);}
   /* アクション/担当者 */
   .own-wrap{display:flex;flex-direction:column;gap:5px;align-items:center;min-width:118px;}

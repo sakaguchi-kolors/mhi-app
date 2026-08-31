@@ -3,6 +3,7 @@ import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { PartsService } from './parts.service';
 import { appUser } from '../common/app-user';
+import { appActor } from '../common/app-actor';
 import type { Part } from '../common/types';
 
 const MAX_TEXT_LEN = 2000;
@@ -43,7 +44,7 @@ export class PartsController {
       userId = Number(body.userId);
       if (!Number.isFinite(userId)) throw new BadRequestException('userId must be a number');
     }
-    await this.parts.setOwner(appUser(req), id, { owner: owner as string | undefined, userId });
+    await this.parts.setOwner(appActor(req), appUser(req), id, { owner: owner as string | undefined, userId });
     return { ok: true };
   }
 
@@ -56,6 +57,12 @@ export class PartsController {
   @Post(':id/shelved')
   async setShelved(@Req() req: Request, @Param('id') id: string, @Body() body: { flagged?: unknown }): Promise<{ ok: true }> {
     await this.parts.setShelved(appUser(req), id, !!body?.flagged);
+    return { ok: true };
+  }
+
+  @Post(':id/watch')
+  async setWatch(@Req() req: Request, @Param('id') id: string, @Body() body: { flagged?: unknown }): Promise<{ ok: true }> {
+    await this.parts.setWatch(appUser(req), id, !!body?.flagged);
     return { ok: true };
   }
 
