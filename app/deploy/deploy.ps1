@@ -181,13 +181,14 @@ if ($DryRun) {
 }
 
 Write-Step 'Health check'
-$healthUrl = "http://127.0.0.1:$apiPort/api/auth/setup"
+$healthUrl = "http://127.0.0.1:$apiPort/api/health"
+$setupUrl = "http://127.0.0.1:$apiPort/api/auth/setup"
 $healthOk = $false
 $resp = $null
 for ($i = 0; $i -lt 10; $i++) {
   try {
-    $resp = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 5
-    if ($null -ne $resp.needsSetup) {
+    $health = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 5
+    if ($health.ok -eq $true) {
       $healthOk = $true
       break
     }
@@ -199,6 +200,8 @@ for ($i = 0; $i -lt 10; $i++) {
 if (-not $healthOk) {
   throw 'API health check failed. See C:\apps\mhi-app\logs\'
 }
+
+try { $resp = Invoke-RestMethod -Uri $setupUrl -TimeoutSec 5 } catch { $resp = $null }
 
 Write-Host "`nDeploy complete." -ForegroundColor Green
 Write-Host "  API: $healthUrl"

@@ -200,6 +200,7 @@ Restart-Service MhiProgressApi
 API 単体確認（サーバー内）:
 
 ```powershell
+Invoke-RestMethod http://127.0.0.1:8787/api/health
 Invoke-RestMethod http://127.0.0.1:8787/api/auth/setup
 ```
 
@@ -358,6 +359,7 @@ C:\apps\mhi-app\
       backup-db.ps1       DBバックアップ（タスクから実行）
       rotate-logs.ps1     ログ削除（60日超）
       install-ops-tasks.ps1  タスク登録
+      watch-health.ps1    死活確認と自動復帰
       make-release.ps1    納品 ZIP 作成（開発 PC 用）
       web.config          IIS 設定
     sample-data\          サンプル CSV
@@ -370,7 +372,7 @@ C:\apps\mhi-backup\       pg_dump（毎日 03:00、60日保持）
 C:\inetpub\mhi\           IIS 配信（frontend/dist + web.config）
 ```
 
-セットアップ／`deploy.ps1` がタスク `MhiApp-BackupDb`（毎日 03:00）と `MhiApp-RotateLogs`（毎日 00:15、60日超の API / IIS / PostgreSQL ログ削除）を登録する。詳細は [オフライン構築手順.md](./オフライン構築手順.md) の日常運用。
+セットアップ／`deploy.ps1` がタスク `MhiApp-BackupDb`（毎日 03:00）、`MhiApp-RotateLogs`（毎日 00:15、60日超ログ削除）、`MhiApp-WatchHealth`（5分おきの死活確認と自動復帰）を登録する。詳細は [オフライン構築手順.md](./オフライン構築手順.md) の日常運用。
 
 ---
 

@@ -12,6 +12,7 @@ import { OwnersModule } from './owners/owners.module';
 import { EtlModule } from './etl/etl.module';
 import { AuditModule } from './audit/audit.module';
 import { BatchModule } from './batch/batch.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { BatchModule } from './batch/batch.module';
     EtlModule,
     AuditModule,
     BatchModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
