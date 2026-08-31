@@ -6,6 +6,7 @@ import {
   isActionNeeded,
   matchInboxFilter,
   matchesInboxQuery,
+  sliceInboxPage,
   type InboxState,
 } from './mobile-inbox.logic';
 import type { Part } from '../types';
@@ -131,5 +132,12 @@ describe('mobile-inbox.logic', () => {
   it('excludes checked parts from tab counts', () => {
     const parts = [basePart({ id: 'a' }), basePart({ id: 'b' })];
     expect(countInboxTabs(parts, state({ checkedIds: new Set(['a']) })).all).toBe(1);
+  });
+
+  it('caps the painted list so phones do not mount every card', () => {
+    const parts = Array.from({ length: 100 }, (_, i) => basePart({ id: String(i) }));
+    expect(sliceInboxPage(parts, 40)).toHaveLength(40);
+    expect(sliceInboxPage(parts, 40).map((p) => p.id)).toEqual(parts.slice(0, 40).map((p) => p.id));
+    expect(sliceInboxPage(parts, 200)).toHaveLength(100);
   });
 });

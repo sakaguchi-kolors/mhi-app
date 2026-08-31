@@ -47,10 +47,14 @@ export function useCardSwipe({ onCheck, onTrouble }: Opts) {
       axis.current = decideSwipeAxis(rawX, rawY, SWIPE_AXIS_LOCK_PX);
       if (axis.current === 'undecided') return;
       if (axis.current === 'y') return;
-      e.currentTarget.setPointerCapture(e.pointerId);
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* iOS 等で未対応でもスワイプ自体は動かす */
+      }
     }
     if (axis.current !== 'x') return;
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     if (Math.abs(rawX) > 8) moved.current = true;
     setDx(clampSwipeDx(rawX));
   }, []);
@@ -66,8 +70,8 @@ export function useCardSwipe({ onCheck, onTrouble }: Opts) {
     if (!dragging.current) return;
     const rawX = e.clientX - start.current.x;
     const wasX = axis.current === 'x';
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
+    if (typeof e.currentTarget.hasPointerCapture === 'function' && e.currentTarget.hasPointerCapture(e.pointerId)) {
+      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* iOS 等 */ }
     }
     if (wasX) finish(rawX);
     else reset();

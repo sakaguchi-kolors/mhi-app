@@ -34,7 +34,10 @@ export function MobilePartCard({
       </div>
       <article
         className={`m-card ${p.color}${checked ? ' checked' : ''}`}
-        style={{ transform: swipe.dx ? `translateX(${swipe.dx}px)` : undefined }}
+        style={{
+          transform: swipe.dx ? `translateX(${swipe.dx}px)` : undefined,
+          willChange: swipe.dx ? 'transform' : undefined,
+        }}
         onPointerDown={swipe.onPointerDown}
         onPointerMove={swipe.onPointerMove}
         onPointerUp={swipe.onPointerUp}

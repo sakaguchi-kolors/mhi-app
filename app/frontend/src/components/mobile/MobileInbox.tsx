@@ -1,10 +1,12 @@
 // スマホ受信箱。優先度順に並べたカードを、上部の3タブで絞り込む。
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Part } from '../../types';
 import {
   buildInbox,
   countInboxTabs,
+  INBOX_PAGE_SIZE,
   INBOX_TAB_LABELS,
+  sliceInboxPage,
   type InboxState,
   type InboxTab,
 } from '../../lib/mobile-inbox.logic';
@@ -38,12 +40,17 @@ export function MobileInbox({
   const [owner, setOwner] = useState(defaultOwner ?? 'all');
   const [kishu, setKishu] = useState('all');
   const [showChecked, setShowChecked] = useState(false);
+  const [visible, setVisible] = useState(INBOX_PAGE_SIZE);
 
   const state = useMemo<InboxState>(
     () => ({ tab, query, owner, kishu, stagnantThreshold, checkedIds, showChecked }),
     [tab, query, owner, kishu, stagnantThreshold, checkedIds, showChecked],
   );
+  useEffect(() => {
+    setVisible(INBOX_PAGE_SIZE);
+  }, [tab, query, owner, kishu, showChecked]);
   const list = useMemo(() => buildInbox(parts, state), [parts, state]);
+  const painted = useMemo(() => sliceInboxPage(list, visible), [list, visible]);
   const counts = useMemo(() => countInboxTabs(parts, state), [parts, state]);
   const kishus = useMemo(() => [...new Set(parts.map((p) => p.kishu).filter(Boolean))].sort(), [parts]);
   const checkedCount = useMemo(
@@ -106,7 +113,7 @@ export function MobileInbox({
             {tab !== 'all' ? '別のタブを選ぶか、' : ''}検索条件を見直してください。
           </p>
         ) : (
-          list.map((p) => (
+          painted.map((p) => (
             <MobilePartCard
               key={p.id}
               part={p}
@@ -117,6 +124,18 @@ export function MobileInbox({
               onTrouble={() => onAskTrouble(p)}
             />
           ))
+        )}
+        {list.length > painted.length && (
+          <button
+            type="button"
+            className="m-more"
+            onClick={() => setVisible((n) => n + INBOX_PAGE_SIZE)}
+          >
+            さらに表示（{painted.length} / {list.length} 件）
+          </button>
+        )}
+        {list.length > 0 && list.length <= painted.length && list.length > INBOX_PAGE_SIZE && (
+          <p className="m-more-end">{list.length} 件すべて表示</p>
         )}
       </div>
     </div>

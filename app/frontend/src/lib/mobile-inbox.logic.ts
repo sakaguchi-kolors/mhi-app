@@ -24,6 +24,14 @@ export const INBOX_TAB_LABELS: Record<InboxTab, string> = {
   trouble: '困りごと',
 };
 
+/** 実機で全件カードを載せるとメモリ不足でタブが落ちるので、最初はこれだけ出す */
+export const INBOX_PAGE_SIZE = 40;
+
+export function sliceInboxPage(list: Part[], visible: number): Part[] {
+  if (visible >= list.length) return list;
+  return list.slice(0, visible);
+}
+
 /** 部品番号・OS_ID・名称・機種を対象にした部分一致 */
 export function matchesInboxQuery(p: Part, query: string): boolean {
   const q = query.trim().toLowerCase();
