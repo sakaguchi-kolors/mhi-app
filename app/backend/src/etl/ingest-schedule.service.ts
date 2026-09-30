@@ -1,4 +1,4 @@
-// アプリ常駐プロセス内の自動取込。指定時刻（日本時間）に CSV_DIR を取り込みます。
+// アプリ常駐プロセス内の自動取込。指定時刻（サーバーのローカル時刻）に CSV_DIR を取り込みます。
 // Windows タスクスケジューラは不要（サービスが動いていれば動く）。
 import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AppConfigService } from '../config/app-config.service';
@@ -10,10 +10,9 @@ import {
   parseScheduleInput,
   shouldTrigger,
   slotKey,
-  tokyoClock,
-  toTokyoDateTime,
   type IngestScheduleStored,
 } from './ingest-schedule';
+import { localClock, localIsoString, serverTimeZone, toLocalIso } from '../common/local-time';
 import { IngestScheduleStore } from './ingest-schedule.store';
 
 const TICK_MS = 15_000;
@@ -37,7 +36,7 @@ export class IngestScheduleService implements OnModuleInit, OnModuleDestroy {
       void this.tick();
     }, TICK_MS);
     this.timer.unref?.();
-    this.logger.log(`自動取込スケジューラを開始（${TICK_MS / 1000}秒間隔・日本時間）`);
+    this.logger.log(`自動取込スケジューラを開始（${TICK_MS / 1000}秒間隔・${serverTimeZone()}）`);
   }
 
   onModuleDestroy(): void {
@@ -73,11 +72,11 @@ export class IngestScheduleService implements OnModuleInit, OnModuleDestroy {
     this.ticking = true;
     try {
       const schedule = this.store.load();
-      const clock = tokyoClock(now);
+      const clock = localClock(now);
       if (!shouldTrigger({ ...schedule, now: clock })) return false;
 
       const slot = slotKey(clock.ymd, clock.hm);
-      this.store.save({ ...schedule, lastSlot: slot, lastTriggeredAt: now.toISOString() });
+      this.store.save({ ...schedule, lastSlot: slot, lastTriggeredAt: localIsoString(now) });
 
       const result = await this.ingest.startIngest(AUTO_INGEST_USER);
       if (!result.started) {
@@ -98,14 +97,14 @@ export class IngestScheduleService implements OnModuleInit, OnModuleDestroy {
   }
 
   private toPublic(stored: IngestScheduleStored): IngestSchedule {
-    const clock = tokyoClock();
+    const clock = localClock();
     return {
       enabled: stored.enabled,
       times: stored.times,
-      lastTriggeredAt: toTokyoDateTime(stored.lastTriggeredAt),
+      lastTriggeredAt: toLocalIso(stored.lastTriggeredAt),
       lastSlot: stored.lastSlot,
       nextRunAt: stored.enabled ? nextRunAt(stored.times, clock) : null,
-      timezone: 'Asia/Tokyo',
+      timezone: serverTimeZone(),
     };
   }
 }

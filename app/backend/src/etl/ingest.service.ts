@@ -10,6 +10,7 @@ import { BatchLockService } from './batch-lock.service';
 import { readCsvHeader } from './csv';
 import { IngestJobStore } from './ingest-job.store';
 import { type IngestUploadKey } from './ingest-upload.constants';
+import { localIsoString, toLocalIso } from '../common/local-time';
 
 export interface IngestFileInfo {
   name: string;
@@ -58,6 +59,12 @@ export interface UploadResult {
   preflightOk: boolean;
 }
 
+/** 旧データ（UTC の `Z` 付き）をサーバーのローカル時刻に揃える */
+function withLocalTimes(job: IngestJob | null): IngestJob | null {
+  if (!job) return null;
+  return { ...job, startedAt: toLocalIso(job.startedAt) ?? job.startedAt, finishedAt: toLocalIso(job.finishedAt) };
+}
+
 @Injectable()
 export class IngestService implements OnModuleInit {
   private readonly logger = new Logger('Ingest');
@@ -76,13 +83,15 @@ export class IngestService implements OnModuleInit {
   }
 
   onModuleInit(): void {
-    const { current, last } = this.store.load();
+    const loaded = this.store.load();
+    const current = withLocalTimes(loaded.current);
+    const last = withLocalTimes(loaded.last);
     if (current?.state === 'running') {
       const recovered: IngestJob = {
         ...current,
         state: 'error',
         error: 'サーバー再起動により中断されました',
-        finishedAt: new Date().toISOString(),
+        finishedAt: localIsoString(),
         elapsedMs: Date.now() - new Date(current.startedAt).getTime(),
       };
       this.lastJob = recovered;
@@ -128,7 +137,7 @@ export class IngestService implements OnModuleInit {
         const st = fs.statSync(full);
         info.exists = true;
         info.size = st.size;
-        info.mtime = st.mtime.toISOString();
+        info.mtime = localIsoString(st.mtime);
         const { encoding, columns } = await readCsvHeader(dir, file);
         info.encoding = encoding;
         const set = new Set(columns);
@@ -216,7 +225,7 @@ export class IngestService implements OnModuleInit {
       id: `ingest-${startedAt.getTime()}`,
       user,
       state: 'running',
-      startedAt: startedAt.toISOString(),
+      startedAt: localIsoString(startedAt),
       finishedAt: null,
       elapsedMs: null,
       result: null,
@@ -247,7 +256,7 @@ export class IngestService implements OnModuleInit {
           .record(user, 'ingest.error', 'batch', this.config.csvDir, null, { error: job.error })
           .catch(() => {});
       } finally {
-        job.finishedAt = new Date().toISOString();
+        job.finishedAt = localIsoString();
         job.elapsedMs = Date.now() - startedAt.getTime();
         this.lastJob = job;
         this.currentJob = null;

@@ -154,7 +154,8 @@ export interface IngestSchedule {
   lastTriggeredAt: string | null;
   lastSlot: string | null;
   nextRunAt: string | null;
-  timezone: 'Asia/Tokyo';
+  /** サーバー（OS）のタイムゾーン名 */
+  timezone: string;
 }
 
 export interface IngestInfo {
